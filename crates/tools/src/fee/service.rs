@@ -1,12 +1,12 @@
 use chrono::Utc;
-use log::{info, warn, debug};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::{
     cache::{FeeCache, DEFAULT_CACHE_TTL_SECS},
-    calculator::{FeeInfo, FeeConfig},
+    calculator::{FeeConfig, FeeInfo},
     currency::{Currency, CurrencyConverter},
     error::FeeResult,
     history::FeeHistory,
@@ -65,12 +65,8 @@ impl FeeEstimationService {
             config,
             fee_config: FeeConfig::default(),
             horizon_fetcher,
-            cache: Arc::new(RwLock::new(FeeCache::new(
-                config.cache_ttl_secs,
-            ))),
-            history: Arc::new(RwLock::new(FeeHistory::new(
-                config.max_history_records,
-            ))),
+            cache: Arc::new(RwLock::new(FeeCache::new(config.cache_ttl_secs))),
+            history: Arc::new(RwLock::new(FeeHistory::new(config.max_history_records))),
             surge_analyzer: Arc::new(RwLock::new(surge_analyzer)),
             converter: Arc::new(RwLock::new(CurrencyConverter::new())),
         }
@@ -88,12 +84,7 @@ impl FeeEstimationService {
         // Try to get fresh base fee from cache
         if let Some(cached_fee) = self.get_cached_fee().await {
             info!("Using cached base fee: {} stroops", cached_fee);
-            return FeeInfo::new(
-                cached_fee,
-                operation_count,
-                false,
-                100.0,
-            );
+            return FeeInfo::new(cached_fee, operation_count, false, 100.0);
         }
 
         // Fetch fresh base fee from Horizon
@@ -103,7 +94,11 @@ impl FeeEstimationService {
         let surge_analyzer = self.surge_analyzer.write().await;
         let analysis = surge_analyzer.analyze(base_fee)?;
 
-        info!("Base fee: {} stroops, Surge level: {}", base_fee, analysis.surge_level.name());
+        info!(
+            "Base fee: {} stroops, Surge level: {}",
+            base_fee,
+            analysis.surge_level.name()
+        );
 
         let fee_info = FeeInfo::new(
             base_fee,

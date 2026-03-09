@@ -339,7 +339,10 @@ mod horizon_integration_tests {
     fn assert_error_type(error_type: &str, is_server: bool, is_client: bool) {
         // Server errors should have is_server_error() == true
         // Client errors should have is_client_error() == true
-        println!("Error type: {}, server: {}, client: {}", error_type, is_server, is_client);
+        println!(
+            "Error type: {}, server: {}, client: {}",
+            error_type, is_server, is_client
+        );
     }
 }
 

@@ -7,7 +7,7 @@
 //! - Request logging and health checks
 
 pub mod cache;
-pub mod health;
 pub mod client;
+pub mod health;
 
 pub use client::{HorizonClient, HorizonClientConfig};

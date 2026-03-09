@@ -154,13 +154,14 @@ impl SurgePricingAnalyzer {
             SurgePricingLevel::Normal => "Fees are normal. Safe to proceed.".to_string(),
             SurgePricingLevel::Elevated => {
                 "Network is slightly congested. Fees are slightly elevated.".to_string()
-            }
+            },
             SurgePricingLevel::High => {
                 "Network is congested. Consider waiting if not urgent.".to_string()
-            }
+            },
             SurgePricingLevel::Critical => {
-                "Network has critical congestion. Wait for fees to decrease if possible.".to_string()
-            }
+                "Network has critical congestion. Wait for fees to decrease if possible."
+                    .to_string()
+            },
         }
     }
 

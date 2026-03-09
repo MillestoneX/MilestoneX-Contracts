@@ -1,6 +1,9 @@
 use fee::{
-    cache::FeeCache, calculator::{calculate_fee, stroops_to_xlm, xlm_to_stroops, FeeConfig},
-    currency::{Currency, CurrencyConverter}, history::FeeHistory, service::FeeServiceConfig,
+    cache::FeeCache,
+    calculator::{calculate_fee, stroops_to_xlm, xlm_to_stroops, FeeConfig},
+    currency::{Currency, CurrencyConverter},
+    history::FeeHistory,
+    service::FeeServiceConfig,
     surge_pricing::{SurgePricingAnalyzer, SurgePricingConfig},
 };
 
@@ -101,7 +104,10 @@ fn test_surge_pricing_trend_detection() {
     }
 
     let final_analysis = analyzer.analyze(150).unwrap();
-    assert_eq!(final_analysis.trend, fee::surge_pricing::FeeTrend::Increasing);
+    assert_eq!(
+        final_analysis.trend,
+        fee::surge_pricing::FeeTrend::Increasing
+    );
 }
 
 /// Caching tests
@@ -310,11 +316,17 @@ fn test_surge_pricing_workflow() {
 
     // 2. Fees start increasing
     let analysis2 = analyzer.analyze(150).unwrap();
-    assert_eq!(analysis2.surge_level, fee::surge_pricing::SurgePricingLevel::Elevated);
+    assert_eq!(
+        analysis2.surge_level,
+        fee::surge_pricing::SurgePricingLevel::Elevated
+    );
 
     // 3. Critical surge
     let analysis3 = analyzer.analyze(400).unwrap();
-    assert_eq!(analysis3.surge_level, fee::surge_pricing::SurgePricingLevel::Critical);
+    assert_eq!(
+        analysis3.surge_level,
+        fee::surge_pricing::SurgePricingLevel::Critical
+    );
     assert!(analysis3.is_surge);
     assert!(analysis3.recommendation.len() > 0);
 }

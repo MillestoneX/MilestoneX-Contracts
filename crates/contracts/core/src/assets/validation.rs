@@ -68,14 +68,14 @@ impl AssetValidator {
                 } else {
                     Err(AssetValidationError::IncorrectDecimals)
                 }
-            }
+            },
             b"USDC" | b"NGNT" | b"USDT" | b"EURT" => {
                 if asset.decimals == 6 {
                     Ok(())
                 } else {
                     Err(AssetValidationError::IncorrectDecimals)
                 }
-            }
+            },
             _ => Err(AssetValidationError::InvalidAssetCode),
         }
     }

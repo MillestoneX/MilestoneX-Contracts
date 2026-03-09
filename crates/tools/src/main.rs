@@ -7,12 +7,12 @@ use std::process::Command;
 
 mod config;
 mod donation_tx_builder;
-mod wallet_signing;
+mod fee;
+mod horizon_client;
 mod horizon_error;
 mod horizon_rate_limit;
 mod horizon_retry;
-mod horizon_client;
-mod fee;
+mod wallet_signing;
 
 use config::{Config, Network};
 use donation_tx_builder::{build_donation_transaction, BuildDonationTxRequest};

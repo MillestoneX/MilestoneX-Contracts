@@ -35,7 +35,7 @@ impl StellarAddress {
     pub fn new(address: String) -> Self {
         Self { address }
     }
-    
+
     /// Get the address as string
     pub fn as_str(&self) -> &String {
         &self.address
@@ -47,12 +47,12 @@ impl MuxedAddress {
     pub fn new(address: String, id: u64) -> Self {
         Self { address, id }
     }
-    
+
     /// Get the address as string
     pub fn as_str(&self) -> &String {
         &self.address
     }
-    
+
     /// Get the muxed ID
     pub fn id(&self) -> u64 {
         self.id

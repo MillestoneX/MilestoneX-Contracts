@@ -73,9 +73,7 @@ impl FeeInfo {
 
         let total_fee_stroops = base_fee_stroops
             .checked_mul(operation_count as i64)
-            .ok_or_else(|| {
-                FeeError::InvalidFeeValue("fee calculation overflow".to_string())
-            })?;
+            .ok_or_else(|| FeeError::InvalidFeeValue("fee calculation overflow".to_string()))?;
 
         let total_fee_xlm = stroops_to_xlm(total_fee_stroops);
 
