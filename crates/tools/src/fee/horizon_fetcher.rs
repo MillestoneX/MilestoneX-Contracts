@@ -69,9 +69,10 @@ impl HorizonFeeFetcher {
             )));
         }
 
-        let body = response.text().await.map_err(|e| {
-            FeeError::ParseError(format!("Failed to read response body: {}", e))
-        })?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| FeeError::ParseError(format!("Failed to read response body: {}", e)))?;
 
         self.parse_base_fee(&body)
     }
@@ -88,9 +89,7 @@ impl HorizonFeeFetcher {
             .and_then(|e| e.get("records"))
             .and_then(|r| r.as_array())
             .and_then(|arr| arr.first())
-            .ok_or_else(|| {
-                FeeError::ParseError("No ledger records in response".to_string())
-            })?;
+            .ok_or_else(|| FeeError::ParseError("No ledger records in response".to_string()))?;
 
         // Extract base_fee_rate
         let base_fee = records
@@ -107,9 +106,7 @@ impl HorizonFeeFetcher {
         }
 
         if base_fee == 0 {
-            return Err(FeeError::InvalidFeeValue(
-                "base fee is zero".to_string(),
-            ));
+            return Err(FeeError::InvalidFeeValue("base fee is zero".to_string()));
         }
 
         info!("Fetched base fee: {} stroops", base_fee);
@@ -137,8 +134,8 @@ mod tests {
 
     #[test]
     fn test_horizon_fee_fetcher_timeout() {
-        let fetcher = HorizonFeeFetcher::new("https://horizon.stellar.org".to_string())
-            .with_timeout(60);
+        let fetcher =
+            HorizonFeeFetcher::new("https://horizon.stellar.org".to_string()).with_timeout(60);
         assert_eq!(fetcher.timeout_secs, 60);
     }
 

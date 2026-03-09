@@ -157,7 +157,10 @@ impl HorizonClient {
 
     /// Create a client for private Horizon
     pub fn private(url: impl Into<String>, requests_per_second: f64) -> HorizonResult<Self> {
-        Self::with_config(HorizonClientConfig::private_horizon(url, requests_per_second))
+        Self::with_config(HorizonClientConfig::private_horizon(
+            url,
+            requests_per_second,
+        ))
     }
 
     /// Get the base URL
@@ -188,89 +191,88 @@ impl HorizonClient {
         let url = format!("{}{}", self.config.server_url, path);
         let context = RequestContext::new();
 
-        let result = self.execute_with_retry(&context, || {
-            Box::pin({
-                let url = url.clone();
-                let http_client = Arc::clone(&self.http_client);
-                let context = context.clone();
-                let rate_limiter = self.rate_limiter.clone();
-                let enable_logging = self.config.enable_logging;
+        let result = self
+            .execute_with_retry(&context, || {
+                Box::pin({
+                    let url = url.clone();
+                    let http_client = Arc::clone(&self.http_client);
+                    let context = context.clone();
+                    let rate_limiter = self.rate_limiter.clone();
+                    let enable_logging = self.config.enable_logging;
 
-                async move {
-                    // Respect rate limits
-                    rate_limiter.acquire().await;
+                    async move {
+                        // Respect rate limits
+                        rate_limiter.acquire().await;
 
-                    if enable_logging {
-                        debug!(
-                            "[{}] GET {} (attempt {})",
-                            context.request_id, url, context.attempt
-                        );
-                    }
+                        if enable_logging {
+                            debug!(
+                                "[{}] GET {} (attempt {})",
+                                context.request_id, url, context.attempt
+                            );
+                        }
 
-                    let response = http_client
-                        .get(&url)
-                        .send()
-                        .await
-                        .map_err(|e| HorizonError::from_reqwest(e))?;
-
-                    let status = response.status();
-
-                    // Handle rate limiting headers
-                    if status == StatusCode::TOO_MANY_REQUESTS {
-                        let retry_after = response
-                            .headers()
-                            .get("retry-after")
-                            .and_then(|v| v.to_str().ok())
-                            .and_then(|s| s.parse::<u64>().ok())
-                            .map(Duration::from_secs)
-                            .unwrap_or(Duration::from_secs(60));
-
-                        return Err(HorizonError::RateLimited {
-                            retry_after,
-                        });
-                    }
-
-                    if !status.is_success() {
-                        let body = response
-                            .text()
+                        let response = http_client
+                            .get(&url)
+                            .send()
                             .await
-                            .unwrap_or_else(|_| "Unknown error".to_string());
+                            .map_err(|e| HorizonError::from_reqwest(e))?;
 
-                        return match status {
-                            StatusCode::NOT_FOUND => Err(HorizonError::NotFound(body)),
-                            StatusCode::BAD_REQUEST => Err(HorizonError::BadRequest(body)),
-                            StatusCode::UNAUTHORIZED => Err(HorizonError::Unauthorized(body)),
-                            StatusCode::FORBIDDEN => Err(HorizonError::Forbidden(body)),
-                            s if s.is_server_error() => Err(HorizonError::ServerError {
-                                status: s.as_u16(),
-                                message: body,
-                            }),
-                            s => Err(HorizonError::HttpError {
-                                status: s.as_u16(),
-                                message: body,
-                            }),
-                        };
+                        let status = response.status();
+
+                        // Handle rate limiting headers
+                        if status == StatusCode::TOO_MANY_REQUESTS {
+                            let retry_after = response
+                                .headers()
+                                .get("retry-after")
+                                .and_then(|v| v.to_str().ok())
+                                .and_then(|s| s.parse::<u64>().ok())
+                                .map(Duration::from_secs)
+                                .unwrap_or(Duration::from_secs(60));
+
+                            return Err(HorizonError::RateLimited { retry_after });
+                        }
+
+                        if !status.is_success() {
+                            let body = response
+                                .text()
+                                .await
+                                .unwrap_or_else(|_| "Unknown error".to_string());
+
+                            return match status {
+                                StatusCode::NOT_FOUND => Err(HorizonError::NotFound(body)),
+                                StatusCode::BAD_REQUEST => Err(HorizonError::BadRequest(body)),
+                                StatusCode::UNAUTHORIZED => Err(HorizonError::Unauthorized(body)),
+                                StatusCode::FORBIDDEN => Err(HorizonError::Forbidden(body)),
+                                s if s.is_server_error() => Err(HorizonError::ServerError {
+                                    status: s.as_u16(),
+                                    message: body,
+                                }),
+                                s => Err(HorizonError::HttpError {
+                                    status: s.as_u16(),
+                                    message: body,
+                                }),
+                            };
+                        }
+
+                        let json = response
+                            .json::<serde_json::Value>()
+                            .await
+                            .map_err(|e| HorizonError::InvalidResponse(e.to_string()))?;
+
+                        if enable_logging {
+                            debug!(
+                                "[{}] GET {} completed in {:?}",
+                                context.request_id,
+                                url,
+                                context.elapsed()
+                            );
+                        }
+
+                        Ok(json)
                     }
-
-                    let json = response
-                        .json::<serde_json::Value>()
-                        .await
-                        .map_err(|e| HorizonError::InvalidResponse(e.to_string()))?;
-
-                    if enable_logging {
-                        debug!(
-                            "[{}] GET {} completed in {:?}",
-                            context.request_id,
-                            url,
-                            context.elapsed()
-                        );
-                    }
-
-                    Ok(json)
-                }
+                })
             })
-        })
-        .await?;
+            .await?;
 
         // Cache the response if enabled
         if let Some(cache) = &self.cache {
@@ -281,11 +283,7 @@ impl HorizonClient {
     }
 
     /// Execute with retry logic
-    async fn execute_with_retry<F, T>(
-        &self,
-        context: &RequestContext,
-        mut f: F,
-    ) -> HorizonResult<T>
+    async fn execute_with_retry<F, T>(&self, context: &RequestContext, mut f: F) -> HorizonResult<T>
     where
         F: FnMut() -> futures::future::BoxFuture<'static, HorizonResult<T>>,
     {
@@ -319,24 +317,26 @@ impl HorizonClient {
                     }
 
                     // Calculate backoff
-                    let backoff = crate::horizon_retry::calculate_backoff(
-                        attempt,
-                        &self.config.retry_config,
-                    );
+                    let backoff =
+                        crate::horizon_retry::calculate_backoff(attempt, &self.config.retry_config);
 
                     warn!(
                         "[{}] Request failed on attempt {}/{}, retrying after {:?}: {}",
-                        ctx.request_id, attempt, self.config.retry_config.max_attempts, backoff, error
+                        ctx.request_id,
+                        attempt,
+                        self.config.retry_config.max_attempts,
+                        backoff,
+                        error
                     );
 
                     tokio::time::sleep(backoff).await;
-                }
+                },
             }
         }
 
-        Err(errors.pop().unwrap_or_else(|| {
-            HorizonError::Other("Unknown retry error".to_string())
-        }))
+        Err(errors
+            .pop()
+            .unwrap_or_else(|| HorizonError::Other("Unknown retry error".to_string())))
     }
 
     /// Clear the response cache

@@ -102,10 +102,10 @@ impl RetryPolicy {
                         | HorizonError::ConnectionReset(_)
                         | HorizonError::DnsError(_)
                 )
-            }
+            },
             RetryPolicy::TransientAndServerErrors => {
                 error.is_retryable() && (error.is_retryable() || error.is_server_error())
-            }
+            },
             RetryPolicy::AllRetryable => error.is_retryable(),
         }
     }
@@ -157,10 +157,7 @@ impl RetryContext {
 }
 
 /// Calculate backoff duration for a given attempt
-pub fn calculate_backoff(
-    attempt: u32,
-    config: &RetryConfig,
-) -> Duration {
+pub fn calculate_backoff(attempt: u32, config: &RetryConfig) -> Duration {
     if attempt == 0 {
         return Duration::from_secs(0);
     }
@@ -179,8 +176,7 @@ pub fn calculate_backoff(
         let jitter_amount = (backoff.as_millis() as f64 * 0.1) as u64;
         let jitter = rand::random::<u64>() % (jitter_amount * 2);
         backoff = Duration::from_millis(
-            (backoff.as_millis() as i64 - jitter_amount as i64 + jitter as i64)
-                .max(0) as u64,
+            (backoff.as_millis() as i64 - jitter_amount as i64 + jitter as i64).max(0) as u64,
         );
     }
 
@@ -227,14 +223,14 @@ where
                 );
 
                 tokio::time::sleep(backoff).await;
-            }
+            },
         }
     }
 
     // Should not reach here, but return last error if we do
-    Err(errors.pop().unwrap_or_else(|| {
-        HorizonError::Other("Unknown retry error".to_string())
-    }))
+    Err(errors
+        .pop()
+        .unwrap_or_else(|| HorizonError::Other("Unknown retry error".to_string())))
 }
 
 // Re-export for use in macros
@@ -279,7 +275,7 @@ mod tests {
     #[test]
     fn test_calculate_backoff() {
         let config = RetryConfig::default();
-        
+
         // First retry has no backoff
         let backoff1 = calculate_backoff(0, &config);
         assert_eq!(backoff1, Duration::from_secs(0));

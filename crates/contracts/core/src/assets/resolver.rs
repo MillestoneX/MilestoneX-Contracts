@@ -57,7 +57,9 @@ impl AssetResolver {
     }
 
     /// Get asset metadata along with the asset
-    pub fn resolve_with_metadata(code: &str) -> Option<(StellarAsset, super::metadata::AssetMetadata)> {
+    pub fn resolve_with_metadata(
+        code: &str,
+    ) -> Option<(StellarAsset, super::metadata::AssetMetadata)> {
         let asset = Self::resolve_by_code(code)?;
         let metadata = MetadataRegistry::get_by_code(code)?;
         Some((asset, metadata))

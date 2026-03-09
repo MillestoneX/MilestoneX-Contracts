@@ -31,9 +31,7 @@ pub struct ResponseCache {
 impl ResponseCache {
     /// Create a new response cache with TTL
     pub fn new(ttl: Duration) -> Self {
-        let cache = Cache::builder()
-            .time_to_live(ttl)
-            .build();
+        let cache = Cache::builder().time_to_live(ttl).build();
 
         Self {
             cache,
@@ -49,7 +47,8 @@ impl ResponseCache {
             return Ok(value);
         }
 
-        self.misses.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.misses
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Err(crate::horizon_error::HorizonError::CacheError(
             "Cache miss".to_string(),
         ))

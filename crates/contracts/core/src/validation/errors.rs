@@ -11,25 +11,25 @@ use soroban_sdk::{contracterror, panic_with_error};
 pub enum ValidationError {
     /// Address is empty or null
     EmptyAddress = 1,
-    
+
     /// Invalid address length (expected 56 for standard, 69 for muxed)
     InvalidLength = 2,
-    
+
     /// Address format is invalid (must start with 'G' or 'M')
     InvalidFormat = 3,
-    
+
     /// Checksum verification failed
     InvalidChecksum = 4,
-    
+
     /// Invalid base32 encoding
     InvalidEncoding = 5,
-    
+
     /// Muxed account parsing failed
     InvalidMuxedFormat = 6,
-    
+
     /// Address contains invalid characters
     InvalidCharacters = 7,
-    
+
     /// Unsupported address version
     UnsupportedVersion = 8,
 }
@@ -48,7 +48,7 @@ impl ValidationError {
             ValidationError::UnsupportedVersion => "Unsupported Stellar address version",
         }
     }
-    
+
     /// Panic with this error
     pub fn panic<E: soroban_sdk::Env>(self, env: &E) -> ! {
         panic_with_error!(env, self)

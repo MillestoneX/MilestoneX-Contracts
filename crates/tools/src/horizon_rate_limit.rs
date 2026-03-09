@@ -70,7 +70,9 @@ impl HorizonRateLimiter {
     pub fn new(config: RateLimitConfig) -> Self {
         // Convert requests per hour to a quota
         // Using non-zero value: requests per hour minimum is 1
-        let quota = Quota::per_hour(NonZeroU32::new(config.requests_per_hour).unwrap_or(NonZeroU32::new(1).unwrap()));
+        let quota = Quota::per_hour(
+            NonZeroU32::new(config.requests_per_hour).unwrap_or(NonZeroU32::new(1).unwrap()),
+        );
         let limiter = RateLimiter::direct(quota);
 
         Self {
@@ -107,7 +109,9 @@ impl HorizonRateLimiter {
     pub fn try_acquire(&self) -> Result<(), u32> {
         match self.limiter.check() {
             Ok(()) => Ok(()),
-            Err(negative) => Err(negative.wait_time_from(std::time::Instant::now()).as_secs() as u32),
+            Err(negative) => {
+                Err(negative.wait_time_from(std::time::Instant::now()).as_secs() as u32)
+            },
         }
     }
 
@@ -213,6 +217,9 @@ mod tests {
     fn test_clone_rate_limiter() {
         let limiter1 = HorizonRateLimiter::public_horizon();
         let limiter2 = limiter1.clone();
-        assert_eq!(limiter1.config().requests_per_hour, limiter2.config().requests_per_hour);
+        assert_eq!(
+            limiter1.config().requests_per_hour,
+            limiter2.config().requests_per_hour
+        );
     }
 }

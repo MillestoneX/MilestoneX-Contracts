@@ -57,10 +57,7 @@ impl HealthCheckResult {
 
     /// Check if service is operational (healthy or degraded)
     pub fn is_operational(&self) -> bool {
-        matches!(
-            self.status,
-            HealthStatus::Healthy | HealthStatus::Degraded
-        )
+        matches!(self.status, HealthStatus::Healthy | HealthStatus::Degraded)
     }
 }
 
@@ -108,7 +105,10 @@ impl HorizonHealthChecker {
     }
 
     /// Perform a health check on Horizon
-    pub async fn check(&self, client: &crate::horizon_client::HorizonClient) -> HorizonResult<HealthCheckResult> {
+    pub async fn check(
+        &self,
+        client: &crate::horizon_client::HorizonClient,
+    ) -> HorizonResult<HealthCheckResult> {
         let start = std::time::Instant::now();
 
         // Get Horizon info
@@ -133,7 +133,7 @@ impl HorizonHealthChecker {
 
                 *self.last_result.write().await = Some(result.clone());
                 Ok(result)
-            }
+            },
             Err(e) => {
                 let response_time = start.elapsed().as_millis() as u64;
 
@@ -148,7 +148,7 @@ impl HorizonHealthChecker {
 
                 *self.last_result.write().await = Some(result.clone());
                 Err(e)
-            }
+            },
         }
     }
 
@@ -201,7 +201,8 @@ impl HealthMonitor {
 
     /// Start continuous monitoring
     pub async fn start(&self, client: crate::horizon_client::HorizonClient) {
-        self.keep_monitoring.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.keep_monitoring
+            .store(true, std::sync::atomic::Ordering::Relaxed);
 
         let checker = self.checker.clone();
         let keep_monitoring = Arc::clone(&self.keep_monitoring);
@@ -211,11 +212,15 @@ impl HealthMonitor {
             while keep_monitoring.load(std::sync::atomic::Ordering::Relaxed) {
                 match checker.check(&client).await {
                     Ok(result) => {
-                        log::info!("Health check passed: {} ({}ms)", result.status, result.response_time_ms);
-                    }
+                        log::info!(
+                            "Health check passed: {} ({}ms)",
+                            result.status,
+                            result.response_time_ms
+                        );
+                    },
                     Err(e) => {
                         log::warn!("Health check failed: {}", e);
-                    }
+                    },
                 }
 
                 tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
@@ -225,7 +230,8 @@ impl HealthMonitor {
 
     /// Stop monitoring
     pub fn stop(&self) {
-        self.keep_monitoring.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.keep_monitoring
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

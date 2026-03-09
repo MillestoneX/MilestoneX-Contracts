@@ -5,3 +5,9 @@ resolver = "2"
 [workspace.dependencies]
 soroban-sdk = "21.0.0"
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+

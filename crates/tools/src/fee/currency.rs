@@ -140,12 +140,7 @@ impl CurrencyConverter {
     }
 
     /// Set exchange rate for currency pair
-    pub fn set_rate(
-        &mut self,
-        base: Currency,
-        target: Currency,
-        rate: f64,
-    ) -> FeeResult<()> {
+    pub fn set_rate(&mut self, base: Currency, target: Currency, rate: f64) -> FeeResult<()> {
         let rate_obj = ExchangeRate::new(base, target, rate)?;
         let key = format!("{}/{}", base.code(), target.code());
         self.rates.insert(key, rate_obj);
@@ -159,16 +154,13 @@ impl CurrencyConverter {
         }
 
         let key = format!("{}/{}", base.code(), target.code());
-        self.rates
-            .get(&key)
-            .map(|r| r.rate)
-            .ok_or_else(|| {
-                FeeError::CurrencyConversionFailed(format!(
-                    "rate not available for {}/{}",
-                    base.code(),
-                    target.code()
-                ))
-            })
+        self.rates.get(&key).map(|r| r.rate).ok_or_else(|| {
+            FeeError::CurrencyConversionFailed(format!(
+                "rate not available for {}/{}",
+                base.code(),
+                target.code()
+            ))
+        })
     }
 
     /// Convert amount from one currency to another
@@ -243,21 +235,12 @@ impl FormattedAmount {
 
     /// Get formatted string
     pub fn to_string(&self) -> String {
-        format!(
-            "{} {:.8}",
-            self.symbol,
-            self.amount
-        )
+        format!("{} {:.8}", self.symbol, self.amount)
     }
 
     /// Get formatted string with specified precision
     pub fn to_string_precision(&self, precision: usize) -> String {
-        format!(
-            "{} {:.prec$}",
-            self.symbol,
-            self.amount,
-            prec = precision
-        )
+        format!("{} {:.prec$}", self.symbol, self.amount, prec = precision)
     }
 }
 

@@ -14,14 +14,14 @@ pub mod service;
 pub mod surge_pricing;
 
 // Re-export frequently used types
-pub use cache::{FeeCache, CacheMetadata, CachedFeeData};
-pub use calculator::{FeeInfo, FeeConfig, calculate_fee, stroops_to_xlm, xlm_to_stroops};
+pub use cache::{CacheMetadata, CachedFeeData, FeeCache};
+pub use calculator::{calculate_fee, stroops_to_xlm, xlm_to_stroops, FeeConfig, FeeInfo};
 pub use currency::{Currency, CurrencyConverter, ExchangeRate, FormattedAmount};
 pub use error::{FeeError, FeeResult};
 pub use history::{FeeHistory, FeeRecord, FeeStats};
 pub use horizon_fetcher::HorizonFeeFetcher;
 pub use service::{FeeEstimationService, FeeServiceConfig};
-pub use surge_pricing::{SurgePricingAnalyzer, SurgePricingConfig, SurgePricingLevel, FeeTrend};
+pub use surge_pricing::{FeeTrend, SurgePricingAnalyzer, SurgePricingConfig, SurgePricingLevel};
 
 /// Stellar fee constants
 pub mod constants {

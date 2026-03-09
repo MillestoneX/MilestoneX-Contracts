@@ -34,7 +34,7 @@ impl fmt::Display for FeeError {
             FeeError::InvalidFeeValue(msg) => write!(f, "Invalid fee value: {}", msg),
             FeeError::CurrencyConversionFailed(msg) => {
                 write!(f, "Currency conversion failed: {}", msg)
-            }
+            },
             FeeError::InvalidCurrency(code) => write!(f, "Invalid currency: {}", code),
             FeeError::CacheUnavailable(msg) => write!(f, "Cache unavailable: {}", msg),
             FeeError::InvalidOperationCount(msg) => write!(f, "Invalid operation count: {}", msg),
@@ -58,10 +58,7 @@ mod tests {
     #[test]
     fn test_error_display() {
         let error = FeeError::HorizonUnavailable("connection refused".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Horizon unavailable: connection refused"
-        );
+        assert_eq!(error.to_string(), "Horizon unavailable: connection refused");
     }
 
     #[test]
