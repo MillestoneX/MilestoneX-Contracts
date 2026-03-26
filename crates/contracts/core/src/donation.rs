@@ -123,6 +123,36 @@ pub fn get_donations_by_project(env: &Env, project_id: &String) -> Vec<Donation>
     donations
 }
 
+// ===== Transaction Hash Tracking for Duplicate Prevention =====
+
+/// Storage key for transaction hash tracking
+/// Key format: "tx_hash_{hash}"
+fn tx_hash_key(env: &Env, tx_hash: &String) -> Vec<u8> {
+    let mut key = Vec::new(env);
+    let prefix = b"tx_hash_";
+    for byte in prefix.iter() {
+        key.push_back(*byte);
+    }
+    
+    for byte in tx_hash.to_bytes().iter() {
+        key.push_back(*byte);
+    }
+    
+    key
+}
+
+/// Check if a transaction hash has already been processed
+pub fn is_transaction_processed(env: &Env, tx_hash: &String) -> bool {
+    let key = tx_hash_key(env, tx_hash);
+    env.storage().instance().has(&key)
+}
+
+/// Mark a transaction hash as processed
+pub fn mark_transaction_processed(env: &Env, tx_hash: &String) {
+    let key = tx_hash_key(env, tx_hash);
+    env.storage().instance().set(&key, &true);
+}
+
 /// Validate donation data
 /// 
 /// Returns true if the donation data is valid

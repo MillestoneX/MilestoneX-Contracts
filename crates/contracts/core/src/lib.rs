@@ -25,11 +25,11 @@ impl CoreContract {
     /// * `amount` - The amount donated
     /// * `asset` - The asset type donated (e.g., "XLM", "USDC")
     /// * `project_id` - The project ID to map this donation to (3-64 chars, alphanumeric with hyphens/underscores)
-    /// * `tx_hash` - The transaction hash of the donation
+    /// * `tx_hash` - The transaction hash of the donation (must be unique)
     ///
     /// # Returns
     /// * The donation amount if successful
-    /// * 0 if validation fails (check validation error for details)
+    /// * 0 if validation fails or duplicate transaction (check validation error for details)
     pub fn donate(
         env: Env,
         donor: Address,
@@ -38,6 +38,18 @@ impl CoreContract {
         project_id: String,
         tx_hash: String,
     ) -> i128 {
+        // Check for duplicate transaction
+        if donation::is_transaction_processed(&env, &tx_hash) {
+            // Emit rejection event for duplicate
+            events::DonationRejected {
+                tx_hash: tx_hash.clone(),
+                reason: String::from_str(&env, "Duplicate transaction hash"),
+                timestamp: env.ledger().timestamp(),
+            }
+            .emit(&env);
+            return 0;
+        }
+
         // Validate donation data with detailed error handling
         match donation::validate_donation_with_error(&env, &donor, amount, &asset, &project_id) {
             Ok(()) => {},
@@ -47,6 +59,9 @@ impl CoreContract {
         // Get timestamp from ledger
         let timestamp = env.ledger().timestamp();
 
+        // Mark transaction as processed BEFORE storing (prevents reentrancy)
+        donation::mark_transaction_processed(&env, &tx_hash);
+
         // Store the donation on-chain
         let donation = donation::Donation::new(
             donor.clone(),
@@ -54,7 +69,7 @@ impl CoreContract {
             asset.clone(),
             project_id.clone(),
             timestamp,
-            tx_hash,
+            tx_hash.clone(),
         );
         
         // Get the index for this donation
@@ -330,5 +345,197 @@ mod tests {
             let donations = client.get_donations(&project_id);
             assert_eq!(donations.len(), 1, "Project should have exactly one donation");
         }
+    }
+
+    // ===== Duplicate Transaction Prevention Tests =====
+
+    #[test]
+    fn test_duplicate_transaction_rejected() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let project_id = String::from_str(&env, "test-project");
+        let tx_hash = String::from_str(&env, "unique-tx-hash-123");
+
+        // First donation should succeed
+        let result1 = client.donate(&donor, &1000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash);
+        assert_eq!(result1, 1000i128);
+
+        // Second donation with same tx_hash should be rejected
+        let result2 = client.donate(&donor, &2000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash);
+        assert_eq!(result2, 0);
+
+        // Verify only one donation was recorded
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 1);
+        assert_eq!(donations.get(0).unwrap().amount, 1000i128);
+    }
+
+    #[test]
+    fn test_different_transactions_same_project_allowed() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let project_id = String::from_str(&env, "test-project");
+
+        // Multiple donations with different tx_hashes should all succeed
+        let tx_hash1 = String::from_str(&env, "tx-hash-001");
+        let result1 = client.donate(&donor, &1000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash1);
+        assert_eq!(result1, 1000i128);
+
+        let tx_hash2 = String::from_str(&env, "tx-hash-002");
+        let result2 = client.donate(&donor, &2000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash2);
+        assert_eq!(result2, 2000i128);
+
+        let tx_hash3 = String::from_str(&env, "tx-hash-003");
+        let result3 = client.donate(&donor, &3000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash3);
+        assert_eq!(result3, 3000i128);
+
+        // Verify all three donations were recorded
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 3);
+    }
+
+    #[test]
+    fn test_same_tx_hash_different_projects_rejected() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let tx_hash = String::from_str(&env, "shared-tx-hash");
+
+        // First donation to project A
+        let project_a = String::from_str(&env, "project-a");
+        let result1 = client.donate(&donor, &1000i128, &String::from_str(&env, "XLM"), &project_a, &tx_hash);
+        assert_eq!(result1, 1000i128);
+
+        // Same tx_hash to project B should be rejected
+        let project_b = String::from_str(&env, "project-b");
+        let result2 = client.donate(&donor, &2000i128, &String::from_str(&env, "XLM"), &project_b, &tx_hash);
+        assert_eq!(result2, 0);
+
+        // Verify only project A has the donation
+        let donations_a = client.get_donations(&project_a);
+        assert_eq!(donations_a.len(), 1);
+
+        let donations_b = client.get_donations(&project_b);
+        assert_eq!(donations_b.len(), 0);
+    }
+
+    #[test]
+    fn test_no_double_counting_on_duplicate() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let project_id = String::from_str(&env, "funding-project");
+        let tx_hash = String::from_str(&env, "double-spend-attempt");
+
+        // Initial donation
+        client.donate(&donor, &5000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash);
+
+        // Attempt to double-spend with same tx_hash
+        for _ in 0..5 {
+            let result = client.donate(&donor, &5000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash);
+            assert_eq!(result, 0, "Duplicate should be rejected");
+        }
+
+        // Verify total is exactly 5000 (no double counting)
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 1);
+        
+        let total: i128 = donations.iter().map(|d| d.amount).sum();
+        assert_eq!(total, 5000i128, "Total should be exactly 5000, no double counting");
+    }
+
+    #[test]
+    fn test_transaction_hash_isolation() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor1 = Address::generate(&env);
+        let donor2 = Address::generate(&env);
+        let project_id = String::from_str(&env, "shared-project");
+
+        // Donor 1 makes donation
+        let tx_hash1 = String::from_str(&env, "donor1-tx");
+        client.donate(&donor1, &1000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash1);
+
+        // Donor 2 tries to use same tx_hash (should fail)
+        let result = client.donate(&donor2, &2000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash1);
+        assert_eq!(result, 0);
+
+        // Donor 2 with different tx_hash should succeed
+        let tx_hash2 = String::from_str(&env, "donor2-tx");
+        let result2 = client.donate(&donor2, &2000i128, &String::from_str(&env, "XLM"), &project_id, &tx_hash2);
+        assert_eq!(result2, 2000i128);
+
+        // Verify both donations recorded
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 2);
+    }
+
+    #[test]
+    fn test_system_consistency_after_duplicate_attempt() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let project_id = String::from_str(&env, "consistency-test");
+
+        // Series of valid donations
+        let hashes = vec![
+            String::from_str(&env, "tx-001"),
+            String::from_str(&env, "tx-002"),
+            String::from_str(&env, "tx-003"),
+        ];
+
+        for (i, tx_hash) in hashes.iter().enumerate() {
+            let amount = ((i + 1) * 1000) as i128;
+            client.donate(&donor, &amount, &String::from_str(&env, "XLM"), &project_id, &tx_hash);
+        }
+
+        // Attempt duplicate of middle transaction
+        let duplicate_result = client.donate(&donor, &9999i128, &String::from_str(&env, "XLM"), &project_id, &hashes.get(1).unwrap());
+        assert_eq!(duplicate_result, 0);
+
+        // Verify system state is consistent
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 3);
+
+        // Verify amounts are unchanged
+        assert_eq!(donations.get(0).unwrap().amount, 1000i128);
+        assert_eq!(donations.get(1).unwrap().amount, 2000i128);
+        assert_eq!(donations.get(2).unwrap().amount, 3000i128);
+
+        // Verify total
+        let total: i128 = donations.iter().map(|d| d.amount).sum();
+        assert_eq!(total, 6000i128);
     }
 }

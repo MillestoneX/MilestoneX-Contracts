@@ -47,6 +47,9 @@ pub enum ValidationError {
 
     /// Project ID has invalid format
     InvalidProjectIdFormat = 13,
+
+    /// Duplicate transaction hash detected
+    DuplicateTransaction = 14,
 }
 
 impl ValidationError {
@@ -66,6 +69,7 @@ impl ValidationError {
             ValidationError::ProjectIdTooLong => "Project ID is too long (maximum 64 characters)",
             ValidationError::InvalidProjectIdCharacters => "Project ID contains invalid characters (allowed: alphanumeric, hyphens, underscores)",
             ValidationError::InvalidProjectIdFormat => "Project ID has invalid format (must start with alphanumeric)",
+            ValidationError::DuplicateTransaction => "Duplicate transaction hash detected - this transaction has already been processed",
         }
     }
 

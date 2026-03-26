@@ -33,6 +33,19 @@ pub struct WithdrawalProcessed {
     pub timestamp: u64,
 }
 
+/// Event emitted when a donation is rejected due to duplicate transaction
+/// 
+/// # Fields
+/// * `tx_hash` - The duplicate transaction hash
+/// * `reason` - The rejection reason
+/// * `timestamp` - When the duplicate was detected
+#[derive(Clone)]
+pub struct DonationRejected {
+    pub tx_hash: String,
+    pub reason: String,
+    pub timestamp: u64,
+}
+
 impl DonationReceived {
     /// Emit the DonationReceived event to the ledger
     /// 
@@ -74,6 +87,24 @@ impl WithdrawalProcessed {
     }
 }
 
+impl DonationRejected {
+    /// Emit the DonationRejected event to the ledger
+    /// 
+    /// # Topics (indexed for querying)
+    /// - tx_hash: The rejected transaction hash
+    /// 
+    /// # Data (full event payload)
+    /// - tx_hash: The duplicate transaction hash
+    /// - reason: Rejection reason
+    /// - timestamp: When the rejection occurred
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.tx_hash.clone(),),
+            (self.tx_hash.clone(), self.reason.clone(), self.timestamp),
+        );
+    }
+}
+
 /// Event type identifier for DonationReceived
 /// Used by indexers to identify this event type
 pub const EVENT_DONATION_RECEIVED: &[u8] = b"donation_received";
@@ -81,3 +112,7 @@ pub const EVENT_DONATION_RECEIVED: &[u8] = b"donation_received";
 /// Event type identifier for WithdrawalProcessed  
 /// Used by indexers to identify this event type
 pub const EVENT_WITHDRAWAL_PROCESSED: &[u8] = b"withdrawal_processed";
+
+/// Event type identifier for DonationRejected
+/// Used by indexers to identify this event type
+pub const EVENT_DONATION_REJECTED: &[u8] = b"donation_rejected";
