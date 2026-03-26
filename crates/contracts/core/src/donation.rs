@@ -1,3 +1,4 @@
+use crate::validation::{validate_project_id, ProjectIdValidationResult, ValidationError};
 use soroban_sdk::{Address, Env, String, Vec};
 
 /// Represents a donation recorded on-chain
@@ -125,7 +126,7 @@ pub fn get_donations_by_project(env: &Env, project_id: &String) -> Vec<Donation>
 /// Validate donation data
 /// 
 /// Returns true if the donation data is valid
-pub fn validate_donation(donor: &Address, amount: i128, asset: &String, project_id: &String) -> bool {
+pub fn validate_donation(env: &Env, donor: &Address, amount: i128, asset: &String, project_id: &String) -> bool {
     // Validate amount is positive
     if amount <= 0 {
         return false;
@@ -136,10 +137,42 @@ pub fn validate_donation(donor: &Address, amount: i128, asset: &String, project_
         return false;
     }
     
-    // Validate project_id is not empty
-    if project_id.to_bytes().len() == 0 {
+    // Validate project_id format
+    let validation_result = validate_project_id(env, project_id);
+    if !validation_result.is_valid() {
         return false;
     }
     
     true
+}
+
+/// Validate donation data and return detailed error
+/// 
+/// Returns Ok(()) if valid, or Err with specific validation error
+pub fn validate_donation_with_error(
+    env: &Env,
+    donor: &Address,
+    amount: i128,
+    asset: &String,
+    project_id: &String,
+) -> Result<(), ValidationError> {
+    // Validate amount is positive
+    if amount <= 0 {
+        return Err(ValidationError::InvalidFormat);
+    }
+    
+    // Validate asset is not empty
+    if asset.to_bytes().len() == 0 {
+        return Err(ValidationError::InvalidFormat);
+    }
+    
+    // Validate project_id format
+    match validate_project_id(env, project_id) {
+        ProjectIdValidationResult::Valid => Ok(()),
+        ProjectIdValidationResult::Empty => Err(ValidationError::EmptyProjectId),
+        ProjectIdValidationResult::TooShort => Err(ValidationError::ProjectIdTooShort),
+        ProjectIdValidationResult::TooLong => Err(ValidationError::ProjectIdTooLong),
+        ProjectIdValidationResult::InvalidCharacters => Err(ValidationError::InvalidProjectIdCharacters),
+        ProjectIdValidationResult::InvalidFormat => Err(ValidationError::InvalidProjectIdFormat),
+    }
 }

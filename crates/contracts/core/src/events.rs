@@ -7,12 +7,14 @@ use soroban_sdk::{Address, Env, String};
 /// * `donor` - The address of the donor
 /// * `amount` - The amount donated
 /// * `asset` - The asset type donated
+/// * `project_id` - The project ID this donation is mapped to
 /// * `timestamp` - The timestamp of the donation
 #[derive(Clone)]
 pub struct DonationReceived {
     pub donor: Address,
     pub amount: i128,
     pub asset: String,
+    pub project_id: String,
     pub timestamp: u64,
 }
 
@@ -36,17 +38,18 @@ impl DonationReceived {
     /// 
     /// # Topics (indexed for querying)
     /// - donor: Address of the donor
-    /// - amount: Amount donated
+    /// - project_id: Project ID for grouping donations
     /// 
     /// # Data (full event payload)
     /// - donor: Address of the donor
     /// - amount: Amount donated  
     /// - asset: Asset type donated
+    /// - project_id: Project ID this donation is mapped to
     /// - timestamp: When the donation was received
     pub fn emit(&self, env: &Env) {
         env.events().publish(
-            (self.donor.clone(), self.amount),
-            (self.donor.clone(), self.amount, self.asset.clone(), self.timestamp),
+            (self.donor.clone(), self.project_id.clone()),
+            (self.donor.clone(), self.amount, self.asset.clone(), self.project_id.clone(), self.timestamp),
         );
     }
 }

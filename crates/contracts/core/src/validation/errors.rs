@@ -32,6 +32,21 @@ pub enum ValidationError {
 
     /// Unsupported address version
     UnsupportedVersion = 8,
+
+    /// Project ID is empty or missing
+    EmptyProjectId = 9,
+
+    /// Project ID is too short (minimum 3 characters)
+    ProjectIdTooShort = 10,
+
+    /// Project ID is too long (maximum 64 characters)
+    ProjectIdTooLong = 11,
+
+    /// Project ID contains invalid characters
+    InvalidProjectIdCharacters = 12,
+
+    /// Project ID has invalid format
+    InvalidProjectIdFormat = 13,
 }
 
 impl ValidationError {
@@ -46,6 +61,11 @@ impl ValidationError {
             ValidationError::InvalidMuxedFormat => "Invalid muxed account format",
             ValidationError::InvalidCharacters => "Address contains invalid characters",
             ValidationError::UnsupportedVersion => "Unsupported Stellar address version",
+            ValidationError::EmptyProjectId => "Project ID cannot be empty",
+            ValidationError::ProjectIdTooShort => "Project ID is too short (minimum 3 characters)",
+            ValidationError::ProjectIdTooLong => "Project ID is too long (maximum 64 characters)",
+            ValidationError::InvalidProjectIdCharacters => "Project ID contains invalid characters (allowed: alphanumeric, hyphens, underscores)",
+            ValidationError::InvalidProjectIdFormat => "Project ID has invalid format (must start with alphanumeric)",
         }
     }
 
