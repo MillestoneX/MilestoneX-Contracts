@@ -5,13 +5,19 @@ pub mod assets;
 pub mod validation;
 pub mod events;
 pub mod donation;
+pub mod storage_optimized;
+pub mod donation_optimized;
+pub mod storage_tests;
 
 #[contract]
 pub struct CoreContract;
 
 #[contractimpl]
 impl CoreContract {
-    pub fn init(_env: Env, _admin: Address) {}
+    pub fn init(env: Env, admin: Address) {
+        // Initialize asset configuration
+        assets::AssetConfig::init(&env, &admin);
+    }
 
     pub fn ping(_env: Env) -> u32 {
         1
@@ -92,6 +98,41 @@ impl CoreContract {
     /// Get all donations for a project
     pub fn get_donations(env: Env, project_id: String) -> soroban_sdk::Vec<Donation> {
         donation::get_donations_by_project(&env, &project_id)
+    }
+
+    // ===== Asset Management Functions (Admin Only) =====
+
+    /// Add a new supported asset (admin only)
+    pub fn add_supported_asset(env: Env, caller: Address, asset_code: String) -> Result<String, String> {
+        assets::AssetConfig::add_asset(&env, &caller, &asset_code)
+            .map_err(|e| String::from_str(&env, e))
+    }
+
+    /// Remove a supported asset (admin only)
+    pub fn remove_supported_asset(env: Env, caller: Address, asset_code: String) -> Result<String, String> {
+        assets::AssetConfig::remove_asset(&env, &caller, &asset_code)
+            .map_err(|e| String::from_str(&env, e))
+    }
+
+    /// Update the asset admin (admin only)
+    pub fn update_asset_admin(env: Env, caller: Address, new_admin: Address) -> Result<String, String> {
+        assets::AssetConfig::update_admin(&env, &caller, &new_admin)
+            .map_err(|e| String::from_str(&env, e))
+    }
+
+    /// Get the list of all supported assets
+    pub fn get_supported_assets(env: Env) -> soroban_sdk::Vec<String> {
+        assets::AssetConfig::get_supported_assets(&env)
+    }
+
+    /// Check if an asset is supported
+    pub fn is_asset_supported(env: Env, asset_code: String) -> bool {
+        assets::AssetConfig::is_asset_supported(&env, &asset_code)
+    }
+
+    /// Get the current asset admin
+    pub fn get_asset_admin(env: Env) -> Option<Address> {
+        assets::AssetConfig::get_admin(&env)
     }
 
     /// Process a withdrawal and emit the WithdrawalProcessed event
@@ -537,5 +578,221 @@ mod tests {
         // Verify total
         let total: i128 = donations.iter().map(|d| d.amount).sum();
         assert_eq!(total, 6000i128);
+    }
+
+    // ===== Asset Validation Tests =====
+
+    #[test]
+    fn test_donate_with_supported_asset_xlm() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let amount = 1000i128;
+        let asset = String::from_str(&env, "XLM");
+        let project_id = String::from_str(&env, "test-project");
+        let tx_hash = String::from_str(&env, "tx-xlm-001");
+
+        let result = client.donate(&donor, &amount, &asset, &project_id, &tx_hash);
+        assert_eq!(result, amount);
+    }
+
+    #[test]
+    fn test_donate_with_supported_asset_usdc() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let amount = 5000i128;
+        let asset = String::from_str(&env, "USDC");
+        let project_id = String::from_str(&env, "test-project");
+        let tx_hash = String::from_str(&env, "tx-usdc-001");
+
+        let result = client.donate(&donor, &amount, &asset, &project_id, &tx_hash);
+        assert_eq!(result, amount);
+    }
+
+    #[test]
+    fn test_donate_with_unsupported_asset_rejected() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let amount = 1000i128;
+        let asset = String::from_str(&env, "BTC"); // Not supported by default
+        let project_id = String::from_str(&env, "test-project");
+        let tx_hash = String::from_str(&env, "tx-btc-001");
+
+        // Should return 0 for unsupported asset
+        let result = client.donate(&donor, &amount, &asset, &project_id, &tx_hash);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_donate_with_empty_asset_rejected() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let amount = 1000i128;
+        let asset = String::from_str(&env, ""); // Empty asset
+        let project_id = String::from_str(&env, "test-project");
+        let tx_hash = String::from_str(&env, "tx-empty-001");
+
+        let result = client.donate(&donor, &amount, &asset, &project_id, &tx_hash);
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_admin_add_supported_asset() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        // Initially BTC should not be supported
+        assert!(!client.is_asset_supported(&String::from_str(&env, "BTC")));
+
+        // Admin adds BTC
+        let result = client.add_supported_asset(&admin, &String::from_str(&env, "BTC"));
+        assert!(result.is_ok());
+
+        // Now BTC should be supported
+        assert!(client.is_asset_supported(&String::from_str(&env, "BTC")));
+    }
+
+    #[test]
+    fn test_non_admin_cannot_add_asset() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let other = Address::generate(&env);
+        client.init(&admin);
+
+        // Non-admin tries to add asset
+        let result = client.add_supported_asset(&other, &String::from_str(&env, "BTC"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_admin_remove_supported_asset() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        // EURT is initially supported
+        assert!(client.is_asset_supported(&String::from_str(&env, "EURT")));
+
+        // Admin removes EURT
+        let result = client.remove_supported_asset(&admin, &String::from_str(&env, "EURT"));
+        assert!(result.is_ok());
+
+        // Now EURT should not be supported
+        assert!(!client.is_asset_supported(&String::from_str(&env, "EURT")));
+    }
+
+    #[test]
+    fn test_get_supported_assets() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let assets = client.get_supported_assets();
+        assert_eq!(assets.len(), 5);
+
+        // Verify all default assets are present
+        assert!(assets.contains(&String::from_str(&env, "XLM")));
+        assert!(assets.contains(&String::from_str(&env, "USDC")));
+        assert!(assets.contains(&String::from_str(&env, "NGNT")));
+        assert!(assets.contains(&String::from_str(&env, "USDT")));
+        assert!(assets.contains(&String::from_str(&env, "EURT")));
+    }
+
+    #[test]
+    fn test_donation_with_all_supported_assets() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        client.init(&admin);
+
+        let donor = Address::generate(&env);
+        let project_id = String::from_str(&env, "multi-asset-project");
+
+        // Test all supported assets
+        let assets = vec![
+            String::from_str(&env, "XLM"),
+            String::from_str(&env, "USDC"),
+            String::from_str(&env, "NGNT"),
+            String::from_str(&env, "USDT"),
+            String::from_str(&env, "EURT"),
+        ];
+
+        for (i, asset) in assets.iter().enumerate() {
+            let amount = ((i + 1) * 1000) as i128;
+            let tx_hash = String::from_str(&env, &format!("tx-{}", i));
+            let result = client.donate(&donor, &amount, &asset, &project_id, &tx_hash);
+            assert_eq!(result, amount, "Donation with asset {:?} should succeed", asset);
+        }
+
+        // Verify all donations were recorded
+        let donations = client.get_donations(&project_id);
+        assert_eq!(donations.len(), 5);
+    }
+
+    #[test]
+    fn test_asset_admin_update() {
+        let env = Env::default();
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let new_admin = Address::generate(&env);
+        client.init(&admin);
+
+        // Verify initial admin
+        assert_eq!(client.get_asset_admin(), Some(admin.clone()));
+
+        // Update admin
+        let result = client.update_asset_admin(&admin, &new_admin);
+        assert!(result.is_ok());
+
+        // Verify new admin
+        assert_eq!(client.get_asset_admin(), Some(new_admin.clone()));
+
+        // Old admin should no longer have permissions
+        let old_admin_result = client.add_supported_asset(&admin, &String::from_str(&env, "BTC"));
+        assert!(old_admin_result.is_err());
+
+        // New admin should have permissions
+        let new_admin_result = client.add_supported_asset(&new_admin, &String::from_str(&env, "BTC"));
+        assert!(new_admin_result.is_ok());
     }
 }
