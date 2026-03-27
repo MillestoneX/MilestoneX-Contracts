@@ -50,6 +50,9 @@ pub enum ValidationError {
 
     /// Duplicate transaction hash detected
     DuplicateTransaction = 14,
+
+    /// Asset is not supported
+    UnsupportedAsset = 15,
 }
 
 impl ValidationError {
@@ -70,6 +73,7 @@ impl ValidationError {
             ValidationError::InvalidProjectIdCharacters => "Project ID contains invalid characters (allowed: alphanumeric, hyphens, underscores)",
             ValidationError::InvalidProjectIdFormat => "Project ID has invalid format (must start with alphanumeric)",
             ValidationError::DuplicateTransaction => "Duplicate transaction hash detected - this transaction has already been processed",
+            ValidationError::UnsupportedAsset => "Asset is not supported - only XLM, USDC, NGNT, USDT, and EURT are accepted",
         }
     }
 

@@ -1,4 +1,5 @@
 use crate::validation::{validate_project_id, ProjectIdValidationResult, ValidationError};
+use crate::assets::{AssetResolver, AssetValidator};
 use soroban_sdk::{Address, Env, String, Vec};
 
 /// Represents a donation recorded on-chain
@@ -194,6 +195,24 @@ pub fn validate_donation_with_error(
     // Validate asset is not empty
     if asset.to_bytes().len() == 0 {
         return Err(ValidationError::InvalidFormat);
+    }
+    
+    // Convert asset String to &str for validation
+    let asset_code = asset.to_string();
+    
+    // Validate asset is supported
+    if !AssetResolver::is_supported(env, &asset_code) {
+        return Err(ValidationError::UnsupportedAsset);
+    }
+    
+    // Additional validation: verify the asset structure matches our registry
+    if let Some(resolved_asset) = AssetResolver::resolve_by_code(env, &asset_code) {
+        // Verify the provided asset string matches the resolved asset code
+        if !resolved_asset.code.eq(asset) {
+            return Err(ValidationError::InvalidFormat);
+        }
+    } else {
+        return Err(ValidationError::UnsupportedAsset);
     }
     
     // Validate project_id format

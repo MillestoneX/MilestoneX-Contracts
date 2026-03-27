@@ -2,7 +2,7 @@
 //!
 //! Provides validation logic for assets and trust lines.
 
-use soroban_sdk::String;
+use soroban_sdk::Env;
 
 use super::config::StellarAsset;
 use super::resolver::AssetResolver;
@@ -31,8 +31,8 @@ pub struct AssetValidator;
 
 impl AssetValidator {
     /// Validate that an asset is supported
-    pub fn validate_asset(asset: &StellarAsset) -> Result<(), AssetValidationError> {
-        if !AssetResolver::validate(asset) {
+    pub fn validate_asset(env: &Env, asset: &StellarAsset) -> Result<(), AssetValidationError> {
+        if !AssetResolver::validate(env, asset) {
             return Err(AssetValidationError::UnsupportedAsset);
         }
         Ok(())
