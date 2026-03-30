@@ -1,5 +1,5 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, token, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, token, Address, Env, String, Vec};
 
 pub mod assets;
 pub mod validation;
@@ -10,6 +10,8 @@ pub mod storage_optimized;
 pub mod donation_optimized;
 pub mod storage_tests;
 pub mod rbac;
+pub mod multisig;
+pub mod refunds;
 
 #[contract]
 pub struct CoreContract;
@@ -32,6 +34,9 @@ impl CoreContract {
 
         // Initialize asset configuration
         assets::AssetConfig::init(&env, &admin);
+
+        // Initialize multisig configuration and default approver set.
+        multisig::MultisigWithdrawal::init(&env, &admin);
     }
 
     pub fn ping(_env: Env) -> u32 {
@@ -91,6 +96,12 @@ impl CoreContract {
                 .emit(&env);
             }
         }
+        if refunds::register_donation(&env, &project_id, amount).is_err() {
+            return 0;
+        }
+
+        // Get timestamp from ledger
+        let timestamp = env.ledger().timestamp();
 
         // Mark transaction as processed BEFORE storing (prevents reentrancy)
         donation::mark_transaction_processed(&env, &tx_hash);
@@ -179,6 +190,35 @@ impl CoreContract {
             beneficiary,
             goal_amount,
             goal_asset,
+    pub fn upsert_campaign(
+        env: Env,
+        caller: Address,
+        project_id: String,
+        beneficiary: Address,
+        goal_amount: i128,
+        end_timestamp: u64,
+        allow_donor_refunds: bool,
+        refund_bps: u32,
+        refund_deadline: u64,
+    ) -> Result<refunds::Campaign, String> {
+        let campaign = refunds::upsert_campaign(
+            &env,
+            &caller,
+            &project_id,
+            &beneficiary,
+            goal_amount,
+            end_timestamp,
+            allow_donor_refunds,
+            refund_bps,
+            refund_deadline,
+        )
+        .map_err(|err| String::from_str(&env, err))?;
+
+        events::CampaignConfigured {
+            project_id,
+            beneficiary,
+            goal_amount,
+            end_timestamp,
             timestamp: env.ledger().timestamp(),
         }
         .emit(&env);
@@ -214,6 +254,26 @@ impl CoreContract {
 
         events::CampaignUpdated {
             project_id: project_id.clone(),
+        Ok(campaign)
+    }
+
+    pub fn get_campaign(env: Env, project_id: String) -> Option<refunds::Campaign> {
+        refunds::get_campaign(&env, &project_id)
+    }
+
+    pub fn cancel_campaign(
+        env: Env,
+        caller: Address,
+        project_id: String,
+        reason: String,
+    ) -> Result<refunds::Campaign, String> {
+        let campaign = refunds::cancel_campaign(&env, &caller, &project_id, &reason)
+            .map_err(|err| String::from_str(&env, err))?;
+
+        events::CampaignCancelled {
+            project_id,
+            cancelled_by: caller,
+            reason,
             timestamp: env.ledger().timestamp(),
         }
         .emit(&env);
@@ -287,6 +347,119 @@ impl CoreContract {
         } else {
             soroban_sdk::Vec::new(&env)
         }
+        Ok(campaign)
+    }
+
+    pub fn request_refund(
+        env: Env,
+        donor: Address,
+        project_id: String,
+        donation_index: u32,
+    ) -> Result<refunds::RefundRequest, String> {
+        let request = refunds::request_refund(&env, &donor, &project_id, donation_index)
+            .map_err(|err| String::from_str(&env, err))?;
+
+        events::RefundRequested {
+            donor,
+            project_id,
+            donation_index,
+            refundable_amount: request.refundable_amount,
+            asset: request.asset.clone(),
+            timestamp: request.requested_at,
+        }
+        .emit(&env);
+
+        Ok(request)
+    }
+
+    pub fn process_refund(
+        env: Env,
+        caller: Address,
+        project_id: String,
+        donation_index: u32,
+        approve: bool,
+        reason: String,
+    ) -> Result<refunds::RefundRequest, String> {
+        let request = refunds::process_refund(
+            &env,
+            &caller,
+            &project_id,
+            donation_index,
+            approve,
+            &reason,
+        )
+        .map_err(|err| String::from_str(&env, err))?;
+
+        if approve {
+            events::RefundApproved {
+                processor: caller.clone(),
+                donor: request.donor.clone(),
+                project_id: project_id.clone(),
+                donation_index,
+                refundable_amount: request.refundable_amount,
+                timestamp: request.updated_at,
+            }
+            .emit(&env);
+
+            events::RefundProcessed {
+                processor: caller,
+                donor: request.donor.clone(),
+                project_id,
+                donation_index,
+                refundable_amount: request.refundable_amount,
+                asset: request.asset.clone(),
+                timestamp: request.updated_at,
+            }
+            .emit(&env);
+        } else {
+            events::RefundRejected {
+                processor: caller,
+                donor: request.donor.clone(),
+                project_id,
+                donation_index,
+                reason,
+                timestamp: request.updated_at,
+            }
+            .emit(&env);
+        }
+
+        Ok(request)
+    }
+
+    pub fn batch_refund(
+        env: Env,
+        caller: Address,
+        project_id: String,
+        donation_indices: Vec<u32>,
+    ) -> Result<u32, String> {
+        let processed = refunds::batch_refund(&env, &caller, &project_id, &donation_indices)
+            .map_err(|err| String::from_str(&env, err))?;
+
+        events::BatchRefundProcessed {
+            processor: caller,
+            project_id,
+            processed_count: processed,
+            timestamp: env.ledger().timestamp(),
+        }
+        .emit(&env);
+
+        Ok(processed)
+    }
+
+    pub fn get_refund_status(
+        env: Env,
+        project_id: String,
+        donation_index: u32,
+    ) -> Option<refunds::RefundStatus> {
+        refunds::get_refund_status(&env, &project_id, donation_index)
+    }
+
+    pub fn get_eligible_refunds(
+        env: Env,
+        donor: Address,
+        project_id: String,
+    ) -> Vec<refunds::EligibleRefund> {
+        refunds::get_eligible_refunds(&env, &donor, &project_id)
     }
 
     // ===== Asset Management Functions (Admin Only) =====
@@ -345,43 +518,86 @@ impl CoreContract {
         // Restricted to admin only
         rbac::Rbac::require_admin(&env);
 
-        // Validate amount
-        if amount <= 0 {
-            panic!("Withdrawal amount must be positive");
+        let config = multisig::MultisigWithdrawal::get_config(&env);
+        if amount > config.single_sig_limit {
+            panic!("Amount exceeds single-sig limit; use propose_withdrawal");
         }
 
-        // Resolve asset contract address
-        let asset_code_str = asset.to_string();
-        let asset_contract = assets::AssetConfig::get_contract_address(&env, &asset_code_str)
-            .unwrap_or_else(|| panic!("Asset contract address not configured for {}", asset_code_str));
+        multisig::execute_withdrawal_transfer(&env, &recipient, amount, &asset)
+    }
 
-        // Initialize token client
-        let token_client = token::Client::new(&env, &asset_contract);
+    /// Configure withdrawal multisig behavior (admin only).
+    pub fn configure_multisig_withdrawal(
+        env: Env,
+        caller: Address,
+        threshold: u32,
+        single_sig_limit: i128,
+        proposal_ttl_secs: u64,
+    ) {
+        multisig::MultisigWithdrawal::configure(
+            &env,
+            &caller,
+            threshold,
+            single_sig_limit,
+            proposal_ttl_secs,
+        );
+    }
 
-        // Check contract balance
-        let contract_address = env.current_contract_address();
-        let balance = token_client.balance(&contract_address);
-        if balance < amount {
-            panic!("Insufficient contract balance for withdrawal");
-        }
+    /// Add a withdrawal approver (admin only).
+    pub fn add_withdrawal_approver(env: Env, caller: Address, approver: Address) {
+        rbac::Rbac::add_approver(&env, &caller, &approver);
+    }
 
-        // Execute transfer
-        token_client.transfer(&contract_address, &recipient, &amount);
+    /// Remove a withdrawal approver (admin only).
+    pub fn remove_withdrawal_approver(env: Env, caller: Address, approver: Address) {
+        rbac::Rbac::remove_approver(&env, &caller, &approver);
+    }
 
-        // Emit the WithdrawalProcessed event
-        events::WithdrawalProcessed {
-            recipient: recipient.clone(),
+    /// List all configured withdrawal approvers.
+    pub fn get_withdrawal_approvers(env: Env) -> Vec<Address> {
+        rbac::Rbac::get_approvers(&env)
+    }
+
+    /// Return current multisig withdrawal configuration.
+    pub fn get_multisig_withdrawal_config(env: Env) -> multisig::MultisigConfig {
+        multisig::MultisigWithdrawal::get_config(&env)
+    }
+
+    /// Create a withdrawal proposal for amounts above the single-sig limit.
+    pub fn propose_withdrawal(
+        env: Env,
+        caller: Address,
+        recipient: Address,
+        amount: i128,
+        asset: String,
+    ) -> u64 {
+        multisig::MultisigWithdrawal::propose_withdrawal(
+            &env,
+            &caller,
+            &recipient,
             amount,
-            asset: asset.clone(),
-            timestamp: env.ledger().timestamp(),
-        }
-        .emit(&env);
+            &asset,
+        )
+    }
 
-        amount
+    /// Approve a withdrawal proposal and auto-execute when threshold is met.
+    pub fn approve_withdrawal(env: Env, caller: Address, proposal_id: u64) -> bool {
+        multisig::MultisigWithdrawal::approve_withdrawal(&env, &caller, proposal_id)
+    }
+
+    /// Cancel a pending withdrawal proposal (proposer or admin).
+    pub fn cancel_withdrawal(env: Env, caller: Address, proposal_id: u64) -> bool {
+        multisig::MultisigWithdrawal::cancel_withdrawal(&env, &caller, proposal_id)
+    }
+
+    /// Get a withdrawal proposal by id.
+    pub fn get_withdrawal_proposal(env: Env, proposal_id: u64) -> Option<multisig::WithdrawalProposal> {
+        multisig::MultisigWithdrawal::get_proposal(&env, proposal_id)
     }
 }
 
 pub use donation::Donation;
+pub use refunds::{Campaign, CampaignStatus, EligibleRefund, RefundEligibility, RefundRequest, RefundStatus};
 
 #[cfg(test)]
 mod tests {
@@ -673,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Unauthorized: caller is not admin")]
+    #[should_panic]
     fn test_withdraw_unauthorized() {
         let env = Env::default();
         
@@ -685,5 +901,375 @@ mod tests {
 
         let recipient = Address::generate(&env);
         client.withdraw(&recipient, &1000i128, &String::from_str(&env, "USDC"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Amount exceeds single-sig limit; use propose_withdrawal")]
+    fn test_large_withdrawal_requires_proposal() {
+    fn test_cancelled_campaign_refund_flow() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let approver = Address::generate(&env);
+        client.init(&admin);
+        client.add_withdrawal_approver(&admin, &approver);
+        client.configure_multisig_withdrawal(&admin, &2u32, &100i128, &3600u64);
+        let beneficiary = Address::generate(&env);
+        let donor = Address::generate(&env);
+        client.init(&admin);
+
+        let asset_code = String::from_str(&env, "USDC");
+        let asset_contract = env.register_stellar_asset_contract(Address::generate(&env));
+        client.add_supported_asset(&admin, &asset_code, &asset_contract);
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &1000i128);
+
+        let recipient = Address::generate(&env);
+        client.withdraw(&recipient, &500i128, &asset_code);
+    }
+
+    #[test]
+    fn test_multisig_auto_executes_at_threshold() {
+        use crate::multisig::ProposalStatus;
+
+        client.upsert_campaign(
+            &admin,
+            &String::from_str(&env, "campaign-refund"),
+            &beneficiary,
+            &10_000i128,
+            &500u64,
+            &false,
+            &10_000u32,
+            &800u64,
+        );
+
+        client.donate(
+            &donor,
+            &2_500i128,
+            &asset_code,
+            &String::from_str(&env, "campaign-refund"),
+            &String::from_str(&env, "refund-flow-tx"),
+        );
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &2_500i128);
+
+        client.cancel_campaign(
+            &admin,
+            &String::from_str(&env, "campaign-refund"),
+            &String::from_str(&env, "creator cancelled"),
+        );
+
+        let request = client.request_refund(&donor, &String::from_str(&env, "campaign-refund"), &0u32);
+        assert_eq!(request.status, RefundStatus::Pending);
+
+        let completed = client.process_refund(
+            &beneficiary,
+            &String::from_str(&env, "campaign-refund"),
+            &0u32,
+            &true,
+            &String::from_str(&env, ""),
+        );
+        assert_eq!(completed.status, RefundStatus::Completed);
+
+        let token_client = token::Client::new(&env, &asset_contract);
+        assert_eq!(token_client.balance(&donor), 2_500i128);
+        assert_eq!(client.get_refund_status(&String::from_str(&env, "campaign-refund"), &0u32), Some(RefundStatus::Completed));
+    }
+
+    #[test]
+    fn test_get_eligible_refunds_time_locked_before_campaign_end() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let approver = Address::generate(&env);
+        client.init(&admin);
+        client.add_withdrawal_approver(&admin, &approver);
+        client.configure_multisig_withdrawal(&admin, &2u32, &100i128, &3600u64);
+
+        let asset_code = String::from_str(&env, "USDC");
+        let asset_contract = env.register_stellar_asset_contract(Address::generate(&env));
+        client.add_supported_asset(&admin, &asset_code, &asset_contract);
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &1000i128);
+
+        let recipient = Address::generate(&env);
+        let proposal_id = client.propose_withdrawal(&admin, &recipient, &500i128, &asset_code);
+
+        let proposal_before = client.get_withdrawal_proposal(&proposal_id).unwrap();
+        assert_eq!(proposal_before.approval_count, 1);
+        assert_eq!(proposal_before.status, ProposalStatus::Pending);
+
+        let executed = client.approve_withdrawal(&approver, &proposal_id);
+        assert!(executed);
+
+        let proposal_after = client.get_withdrawal_proposal(&proposal_id).unwrap();
+        assert_eq!(proposal_after.approval_count, 2);
+        assert_eq!(proposal_after.status, ProposalStatus::Executed);
+
+        let token_client = token::Client::new(&env, &asset_contract);
+        assert_eq!(token_client.balance(&contract_id), 500i128);
+        assert_eq!(token_client.balance(&recipient), 500i128);
+    }
+
+    #[test]
+    #[should_panic(expected = "Approver has already approved this proposal")]
+    fn test_multisig_rejects_duplicate_approval() {
+        let admin = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let donor = Address::generate(&env);
+        client.init(&admin);
+
+        client.upsert_campaign(
+            &admin,
+            &String::from_str(&env, "timelock-campaign"),
+            &beneficiary,
+            &10_000i128,
+            &1_000u64,
+            &true,
+            &10_000u32,
+            &1_500u64,
+        );
+
+        client.donate(
+            &donor,
+            &1_000i128,
+            &String::from_str(&env, "XLM"),
+            &String::from_str(&env, "timelock-campaign"),
+            &String::from_str(&env, "timelock-tx"),
+        );
+
+        let eligible = client.get_eligible_refunds(&donor, &String::from_str(&env, "timelock-campaign"));
+        assert_eq!(eligible.len(), 1);
+        assert_eq!(eligible.get(0).unwrap().eligibility, RefundEligibility::TimeLocked);
+    }
+
+    #[test]
+    fn test_partial_refund_and_batch_refund() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let approver = Address::generate(&env);
+        client.init(&admin);
+        client.add_withdrawal_approver(&admin, &approver);
+        client.configure_multisig_withdrawal(&admin, &2u32, &100i128, &3600u64);
+        let admin = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let donor_one = Address::generate(&env);
+        let donor_two = Address::generate(&env);
+        client.init(&admin);
+
+        let asset_code = String::from_str(&env, "USDC");
+        let asset_contract = env.register_stellar_asset_contract(Address::generate(&env));
+        client.add_supported_asset(&admin, &asset_code, &asset_contract);
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &1000i128);
+
+        let recipient = Address::generate(&env);
+        let proposal_id = client.propose_withdrawal(&admin, &recipient, &500i128, &asset_code);
+
+        client.approve_withdrawal(&admin, &proposal_id);
+    }
+
+    #[test]
+    #[should_panic(expected = "Proposal has expired")]
+    fn test_multisig_proposal_expiration() {
+        client.upsert_campaign(
+            &admin,
+            &String::from_str(&env, "batch-campaign"),
+            &beneficiary,
+            &50_000i128,
+            &500u64,
+            &false,
+            &5_000u32,
+            &900u64,
+        );
+
+        client.donate(
+            &donor_one,
+            &4_000i128,
+            &asset_code,
+            &String::from_str(&env, "batch-campaign"),
+            &String::from_str(&env, "batch-tx-1"),
+        );
+        client.donate(
+            &donor_two,
+            &6_000i128,
+            &asset_code,
+            &String::from_str(&env, "batch-campaign"),
+            &String::from_str(&env, "batch-tx-2"),
+        );
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &5_000i128);
+
+        client.cancel_campaign(
+            &admin,
+            &String::from_str(&env, "batch-campaign"),
+            &String::from_str(&env, "cancelled for refunds"),
+        );
+
+        let donor_one_refunds = client.get_eligible_refunds(&donor_one, &String::from_str(&env, "batch-campaign"));
+        assert_eq!(donor_one_refunds.get(0).unwrap().eligibility, RefundEligibility::PartiallyEligible);
+        assert_eq!(donor_one_refunds.get(0).unwrap().refundable_amount, 2_000i128);
+
+        let mut donation_indices = Vec::new(&env);
+        donation_indices.push_back(0u32);
+        donation_indices.push_back(1u32);
+
+        let processed = client.batch_refund(&beneficiary, &String::from_str(&env, "batch-campaign"), &donation_indices);
+        assert_eq!(processed, 2u32);
+
+        let token_client = token::Client::new(&env, &asset_contract);
+        assert_eq!(token_client.balance(&donor_one), 2_000i128);
+        assert_eq!(token_client.balance(&donor_two), 3_000i128);
+    }
+
+    #[test]
+    fn test_expired_campaign_without_goal_allows_refund_request() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let approver = Address::generate(&env);
+        client.init(&admin);
+        client.add_withdrawal_approver(&admin, &approver);
+        client.configure_multisig_withdrawal(&admin, &2u32, &100i128, &1u64);
+
+        let asset_code = String::from_str(&env, "USDC");
+        let asset_contract = env.register_stellar_asset_contract(Address::generate(&env));
+        client.add_supported_asset(&admin, &asset_code, &asset_contract);
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &1000i128);
+
+        let recipient = Address::generate(&env);
+        let proposal_id = client.propose_withdrawal(&admin, &recipient, &500i128, &asset_code);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 2;
+        });
+
+        client.approve_withdrawal(&approver, &proposal_id);
+    }
+
+    #[test]
+    fn test_single_sig_path_still_works_for_small_amounts() {
+        let admin = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let donor = Address::generate(&env);
+        client.init(&admin);
+
+        client.upsert_campaign(
+            &admin,
+            &String::from_str(&env, "expired-campaign"),
+            &beneficiary,
+            &10_000i128,
+            &100u64,
+            &false,
+            &10_000u32,
+            &300u64,
+        );
+
+        client.donate(
+            &donor,
+            &1_000i128,
+            &String::from_str(&env, "XLM"),
+            &String::from_str(&env, "expired-campaign"),
+            &String::from_str(&env, "expired-tx"),
+        );
+
+        env.ledger().with_mut(|li| {
+            li.timestamp = 150u64;
+        });
+
+        let request = client.request_refund(&donor, &String::from_str(&env, "expired-campaign"), &0u32);
+        assert_eq!(request.status, RefundStatus::Pending);
+    }
+
+    #[test]
+    fn test_pending_refund_becomes_expired_after_deadline() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let contract_id = env.register_contract(None, CoreContract);
+        let client = CoreContractClient::new(&env, &contract_id);
+
+        let admin = Address::generate(&env);
+        let approver = Address::generate(&env);
+        client.init(&admin);
+        client.add_withdrawal_approver(&admin, &approver);
+        client.configure_multisig_withdrawal(&admin, &2u32, &100i128, &3600u64);
+
+        let asset_code = String::from_str(&env, "USDC");
+        let asset_contract = env.register_stellar_asset_contract(Address::generate(&env));
+        client.add_supported_asset(&admin, &asset_code, &asset_contract);
+
+        let token_admin = token::StellarAssetClient::new(&env, &asset_contract);
+        token_admin.mint(&contract_id, &200i128);
+
+        let recipient = Address::generate(&env);
+        let result = client.withdraw(&recipient, &50i128, &asset_code);
+
+        assert_eq!(result, 50i128);
+        let token_client = token::Client::new(&env, &asset_contract);
+        assert_eq!(token_client.balance(&contract_id), 150i128);
+        assert_eq!(token_client.balance(&recipient), 50i128);
+        let admin = Address::generate(&env);
+        let beneficiary = Address::generate(&env);
+        let donor = Address::generate(&env);
+        client.init(&admin);
+
+        client.upsert_campaign(
+            &admin,
+            &String::from_str(&env, "expiry-status-campaign"),
+            &beneficiary,
+            &10_000i128,
+            &100u64,
+            &true,
+            &10_000u32,
+            &160u64,
+        );
+
+        client.donate(
+            &donor,
+            &1_000i128,
+            &String::from_str(&env, "XLM"),
+            &String::from_str(&env, "expiry-status-campaign"),
+            &String::from_str(&env, "expiry-status-tx"),
+        );
+
+        env.ledger().with_mut(|li| {
+            li.timestamp = 120u64;
+        });
+
+        client.request_refund(&donor, &String::from_str(&env, "expiry-status-campaign"), &0u32);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp = 200u64;
+        });
+
+        assert_eq!(
+            client.get_refund_status(&String::from_str(&env, "expiry-status-campaign"), &0u32),
+            Some(RefundStatus::Expired)
+        );
     }
 }

@@ -69,6 +69,125 @@ pub struct CampaignStatusChanged {
     pub project_id: String,
     pub previous_status: u32,
     pub new_status: u32,
+/// Event emitted when a multi-signature withdrawal proposal is created.
+#[derive(Clone)]
+pub struct WithdrawalProposalCreated {
+    pub proposal_id: u64,
+    pub proposer: Address,
+    pub recipient: Address,
+    pub amount: i128,
+    pub asset: String,
+    pub threshold: u32,
+    pub expires_at: u64,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal receives an approval.
+#[derive(Clone)]
+pub struct WithdrawalProposalApproved {
+    pub proposal_id: u64,
+    pub approver: Address,
+    pub approval_count: u32,
+    pub threshold: u32,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal gets executed.
+#[derive(Clone)]
+pub struct WithdrawalProposalExecuted {
+    pub proposal_id: u64,
+    pub recipient: Address,
+    pub amount: i128,
+    pub asset: String,
+    pub executed_by: Address,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal is cancelled before execution.
+#[derive(Clone)]
+pub struct WithdrawalProposalCancelled {
+    pub proposal_id: u64,
+    pub cancelled_by: Address,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a pending proposal expires.
+#[derive(Clone)]
+pub struct WithdrawalProposalExpired {
+    pub proposal_id: u64,
+    pub timestamp: u64,
+}
+
+/// Event emitted whenever multisig config is changed.
+#[derive(Clone)]
+pub struct WithdrawalMultisigConfigUpdated {
+    pub admin: Address,
+    pub threshold: u32,
+    pub single_sig_limit: i128,
+    pub proposal_ttl_secs: u64,
+#[derive(Clone)]
+pub struct CampaignConfigured {
+    pub project_id: String,
+    pub beneficiary: Address,
+    pub goal_amount: i128,
+    pub end_timestamp: u64,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct CampaignCancelled {
+    pub project_id: String,
+    pub cancelled_by: Address,
+    pub reason: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct RefundRequested {
+    pub donor: Address,
+    pub project_id: String,
+    pub donation_index: u32,
+    pub refundable_amount: i128,
+    pub asset: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct RefundApproved {
+    pub processor: Address,
+    pub donor: Address,
+    pub project_id: String,
+    pub donation_index: u32,
+    pub refundable_amount: i128,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct RefundProcessed {
+    pub processor: Address,
+    pub donor: Address,
+    pub project_id: String,
+    pub donation_index: u32,
+    pub refundable_amount: i128,
+    pub asset: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct RefundRejected {
+    pub processor: Address,
+    pub donor: Address,
+    pub project_id: String,
+    pub donation_index: u32,
+    pub reason: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone)]
+pub struct BatchRefundProcessed {
+    pub processor: Address,
+    pub project_id: String,
+    pub processed_count: u32,
     pub timestamp: u64,
 }
 
@@ -135,11 +254,120 @@ impl CampaignCreated {
     pub fn emit(&self, env: &Env) {
         env.events().publish(
             (self.project_id.clone(), String::from_str(env, "campaign_created")),
+impl WithdrawalProposalCreated {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.proposer.clone()),
+            (
+                self.proposal_id,
+                self.proposer.clone(),
+                self.recipient.clone(),
+                self.amount,
+                self.asset.clone(),
+                self.threshold,
+                self.expires_at,
+impl CampaignConfigured {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.project_id.clone(), self.beneficiary.clone()),
             (
                 self.project_id.clone(),
                 self.beneficiary.clone(),
                 self.goal_amount,
                 self.goal_asset.clone(),
+                self.end_timestamp,
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalApproved {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.approver.clone()),
+            (
+                self.proposal_id,
+                self.approver.clone(),
+                self.approval_count,
+                self.threshold,
+impl CampaignCancelled {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.project_id.clone(), self.cancelled_by.clone()),
+            (
+                self.project_id.clone(),
+                self.cancelled_by.clone(),
+                self.reason.clone(),
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalExecuted {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.executed_by.clone()),
+            (
+                self.proposal_id,
+                self.recipient.clone(),
+                self.amount,
+                self.asset.clone(),
+                self.executed_by.clone(),
+impl RefundRequested {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.donor.clone(), self.project_id.clone(), self.donation_index),
+            (
+                self.donor.clone(),
+                self.project_id.clone(),
+                self.donation_index,
+                self.refundable_amount,
+                self.asset.clone(),
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalCancelled {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.cancelled_by.clone()),
+            (self.proposal_id, self.cancelled_by.clone(), self.timestamp),
+        );
+    }
+}
+
+impl WithdrawalProposalExpired {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id,),
+            (self.proposal_id, self.timestamp),
+        );
+    }
+}
+
+impl WithdrawalMultisigConfigUpdated {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.admin.clone(), self.threshold),
+            (
+                self.admin.clone(),
+                self.threshold,
+                self.single_sig_limit,
+                self.proposal_ttl_secs,
+impl RefundApproved {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.processor.clone(), self.project_id.clone(), self.donation_index),
+            (
+                self.processor.clone(),
+                self.donor.clone(),
+                self.project_id.clone(),
+                self.donation_index,
+                self.refundable_amount,
                 self.timestamp,
             ),
         );
@@ -163,6 +391,47 @@ impl CampaignStatusChanged {
                 self.project_id.clone(),
                 self.previous_status,
                 self.new_status,
+impl RefundProcessed {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.donor.clone(), self.project_id.clone(), self.donation_index),
+            (
+                self.processor.clone(),
+                self.donor.clone(),
+                self.project_id.clone(),
+                self.donation_index,
+                self.refundable_amount,
+                self.asset.clone(),
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl RefundRejected {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.processor.clone(), self.project_id.clone(), self.donation_index),
+            (
+                self.processor.clone(),
+                self.donor.clone(),
+                self.project_id.clone(),
+                self.donation_index,
+                self.reason.clone(),
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl BatchRefundProcessed {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.processor.clone(), self.project_id.clone()),
+            (
+                self.processor.clone(),
+                self.project_id.clone(),
+                self.processed_count,
                 self.timestamp,
             ),
         );
@@ -189,3 +458,33 @@ pub const EVENT_CAMPAIGN_UPDATED: &[u8] = b"campaign_updated";
 
 /// Event type identifier for CampaignStatusChanged
 pub const EVENT_CAMPAIGN_STATUS_CHANGED: &[u8] = b"campaign_status_changed";
+/// Event type identifier for WithdrawalProposalCreated
+pub const EVENT_WITHDRAWAL_PROPOSAL_CREATED: &[u8] = b"withdrawal_proposal_created";
+
+/// Event type identifier for WithdrawalProposalApproved
+pub const EVENT_WITHDRAWAL_PROPOSAL_APPROVED: &[u8] = b"withdrawal_proposal_approved";
+
+/// Event type identifier for WithdrawalProposalExecuted
+pub const EVENT_WITHDRAWAL_PROPOSAL_EXECUTED: &[u8] = b"withdrawal_proposal_executed";
+
+/// Event type identifier for WithdrawalProposalCancelled
+pub const EVENT_WITHDRAWAL_PROPOSAL_CANCELLED: &[u8] = b"withdrawal_proposal_cancelled";
+
+/// Event type identifier for WithdrawalProposalExpired
+pub const EVENT_WITHDRAWAL_PROPOSAL_EXPIRED: &[u8] = b"withdrawal_proposal_expired";
+
+/// Event type identifier for WithdrawalMultisigConfigUpdated
+pub const EVENT_WITHDRAWAL_MULTISIG_CONFIG_UPDATED: &[u8] = b"withdrawal_multisig_config_updated";
+pub const EVENT_CAMPAIGN_CONFIGURED: &[u8] = b"campaign_configured";
+
+pub const EVENT_CAMPAIGN_CANCELLED: &[u8] = b"campaign_cancelled";
+
+pub const EVENT_REFUND_REQUESTED: &[u8] = b"refund_requested";
+
+pub const EVENT_REFUND_APPROVED: &[u8] = b"refund_approved";
+
+pub const EVENT_REFUND_PROCESSED: &[u8] = b"refund_processed";
+
+pub const EVENT_REFUND_REJECTED: &[u8] = b"refund_rejected";
+
+pub const EVENT_BATCH_REFUND_PROCESSED: &[u8] = b"batch_refund_processed";
