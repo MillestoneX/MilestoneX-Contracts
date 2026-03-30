@@ -46,6 +46,65 @@ pub struct DonationRejected {
     pub timestamp: u64,
 }
 
+/// Event emitted when a multi-signature withdrawal proposal is created.
+#[derive(Clone)]
+pub struct WithdrawalProposalCreated {
+    pub proposal_id: u64,
+    pub proposer: Address,
+    pub recipient: Address,
+    pub amount: i128,
+    pub asset: String,
+    pub threshold: u32,
+    pub expires_at: u64,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal receives an approval.
+#[derive(Clone)]
+pub struct WithdrawalProposalApproved {
+    pub proposal_id: u64,
+    pub approver: Address,
+    pub approval_count: u32,
+    pub threshold: u32,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal gets executed.
+#[derive(Clone)]
+pub struct WithdrawalProposalExecuted {
+    pub proposal_id: u64,
+    pub recipient: Address,
+    pub amount: i128,
+    pub asset: String,
+    pub executed_by: Address,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a proposal is cancelled before execution.
+#[derive(Clone)]
+pub struct WithdrawalProposalCancelled {
+    pub proposal_id: u64,
+    pub cancelled_by: Address,
+    pub timestamp: u64,
+}
+
+/// Event emitted when a pending proposal expires.
+#[derive(Clone)]
+pub struct WithdrawalProposalExpired {
+    pub proposal_id: u64,
+    pub timestamp: u64,
+}
+
+/// Event emitted whenever multisig config is changed.
+#[derive(Clone)]
+pub struct WithdrawalMultisigConfigUpdated {
+    pub admin: Address,
+    pub threshold: u32,
+    pub single_sig_limit: i128,
+    pub proposal_ttl_secs: u64,
+    pub timestamp: u64,
+}
+
 impl DonationReceived {
     /// Emit the DonationReceived event to the ledger
     /// 
@@ -105,6 +164,88 @@ impl DonationRejected {
     }
 }
 
+impl WithdrawalProposalCreated {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.proposer.clone()),
+            (
+                self.proposal_id,
+                self.proposer.clone(),
+                self.recipient.clone(),
+                self.amount,
+                self.asset.clone(),
+                self.threshold,
+                self.expires_at,
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalApproved {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.approver.clone()),
+            (
+                self.proposal_id,
+                self.approver.clone(),
+                self.approval_count,
+                self.threshold,
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalExecuted {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.executed_by.clone()),
+            (
+                self.proposal_id,
+                self.recipient.clone(),
+                self.amount,
+                self.asset.clone(),
+                self.executed_by.clone(),
+                self.timestamp,
+            ),
+        );
+    }
+}
+
+impl WithdrawalProposalCancelled {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id, self.cancelled_by.clone()),
+            (self.proposal_id, self.cancelled_by.clone(), self.timestamp),
+        );
+    }
+}
+
+impl WithdrawalProposalExpired {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.proposal_id,),
+            (self.proposal_id, self.timestamp),
+        );
+    }
+}
+
+impl WithdrawalMultisigConfigUpdated {
+    pub fn emit(&self, env: &Env) {
+        env.events().publish(
+            (self.admin.clone(), self.threshold),
+            (
+                self.admin.clone(),
+                self.threshold,
+                self.single_sig_limit,
+                self.proposal_ttl_secs,
+                self.timestamp,
+            ),
+        );
+    }
+}
+
 /// Event type identifier for DonationReceived
 /// Used by indexers to identify this event type
 pub const EVENT_DONATION_RECEIVED: &[u8] = b"donation_received";
@@ -116,3 +257,21 @@ pub const EVENT_WITHDRAWAL_PROCESSED: &[u8] = b"withdrawal_processed";
 /// Event type identifier for DonationRejected
 /// Used by indexers to identify this event type
 pub const EVENT_DONATION_REJECTED: &[u8] = b"donation_rejected";
+
+/// Event type identifier for WithdrawalProposalCreated
+pub const EVENT_WITHDRAWAL_PROPOSAL_CREATED: &[u8] = b"withdrawal_proposal_created";
+
+/// Event type identifier for WithdrawalProposalApproved
+pub const EVENT_WITHDRAWAL_PROPOSAL_APPROVED: &[u8] = b"withdrawal_proposal_approved";
+
+/// Event type identifier for WithdrawalProposalExecuted
+pub const EVENT_WITHDRAWAL_PROPOSAL_EXECUTED: &[u8] = b"withdrawal_proposal_executed";
+
+/// Event type identifier for WithdrawalProposalCancelled
+pub const EVENT_WITHDRAWAL_PROPOSAL_CANCELLED: &[u8] = b"withdrawal_proposal_cancelled";
+
+/// Event type identifier for WithdrawalProposalExpired
+pub const EVENT_WITHDRAWAL_PROPOSAL_EXPIRED: &[u8] = b"withdrawal_proposal_expired";
+
+/// Event type identifier for WithdrawalMultisigConfigUpdated
+pub const EVENT_WITHDRAWAL_MULTISIG_CONFIG_UPDATED: &[u8] = b"withdrawal_multisig_config_updated";
