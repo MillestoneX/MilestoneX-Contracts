@@ -301,6 +301,223 @@ enum ConfigAction {
     Init,
 }
 
+#[derive(Subcommand)]
+enum BatchAction {
+    /// Execute batch operations from CSV file
+    Execute {
+        /// CSV file path
+        #[arg(long)]
+        file: String,
+        /// Execute in parallel
+        #[arg(long)]
+        parallel: bool,
+        /// Continue on error
+        #[arg(long)]
+        continue_on_error: bool,
+        /// Max concurrent operations
+        #[arg(long)]
+        max_concurrent: Option<usize>,
+        /// Export results to file
+        #[arg(long)]
+        export_results: Option<String>,
+    },
+    /// Create batch template
+    CreateTemplate {
+        /// Output file path
+        #[arg(long)]
+        output: String,
+        /// Batch operation type
+        #[arg(long)]
+        operation_type: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum DebugAction {
+    /// Collect comprehensive debug information
+    Collect {
+        /// Account ID to debug
+        #[arg(long)]
+        account: String,
+        /// Contract ID to debug
+        #[arg(long)]
+        contract: Option<String>,
+        /// Export debug report to file
+        #[arg(long)]
+        export: Option<String>,
+        /// Network to debug
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Analyze transaction failure
+    AnalyzeFailure {
+        /// Transaction hash to analyze
+        #[arg(long)]
+        tx_hash: String,
+        /// Account ID for context
+        #[arg(long)]
+        account: String,
+        /// Network to query
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Check network status and performance
+    NetworkStatus {
+        /// Network to check
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+        /// Detailed performance metrics
+        #[arg(long)]
+        detailed: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum ContractAction {
+    /// Get contract methods and information
+    Info {
+        /// Contract ID
+        #[arg(long)]
+        contract: String,
+        /// Export format (json, markdown)
+        #[arg(long, default_value = "json")]
+        format: String,
+        /// Output file
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Query contract method
+    Query {
+        /// Contract ID
+        #[arg(long)]
+        contract: String,
+        /// Method name
+        #[arg(long)]
+        method: String,
+        /// Method arguments (JSON array)
+        #[arg(long)]
+        args: Option<String>,
+        /// Simulate only (don't submit)
+        #[arg(long)]
+        simulate: bool,
+        /// Network to query
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Get contract state
+    State {
+        /// Contract ID
+        #[arg(long)]
+        contract: String,
+        /// Export state to file
+        #[arg(long)]
+        export: Option<String>,
+        /// Network to query
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Generate method call template
+    Template {
+        /// Contract ID
+        #[arg(long)]
+        contract: String,
+        /// Method name
+        #[arg(long)]
+        method: String,
+        /// Output file
+        #[arg(long)]
+        output: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum AccountAction {
+    /// Create new account
+    Create {
+        /// Save to secure vault
+        #[arg(long)]
+        save: bool,
+        /// Password for secure vault
+        #[arg(long)]
+        password: Option<String>,
+        /// Generate mnemonic
+        #[arg(long)]
+        generate_mnemonic: bool,
+    },
+    /// Import existing account
+    Import {
+        /// Import from private key
+        #[arg(long)]
+        private_key: Option<String>,
+        /// Import from mnemonic
+        #[arg(long)]
+        mnemonic: Option<String>,
+        /// Save to secure vault
+        #[arg(long)]
+        save: bool,
+        /// Password for secure vault
+        #[arg(long)]
+        password: Option<String>,
+    },
+    /// Export account information
+    Export {
+        /// Account ID
+        #[arg(long)]
+        account: String,
+        /// Password for secure vault
+        #[arg(long)]
+        password: String,
+        /// Export format (json)
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    /// List all accounts
+    List {
+        /// Show detailed information
+        #[arg(long)]
+        detailed: bool,
+    },
+    /// Get account balance
+    Balance {
+        /// Account ID
+        #[arg(long)]
+        account: String,
+        /// Network to query
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Get account signers
+    Signers {
+        /// Account ID
+        #[arg(long)]
+        account: String,
+        /// Network to query
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Fund testnet account
+    Fund {
+        /// Account ID to fund
+        #[arg(long)]
+        account: String,
+        /// Network (only testnet supported)
+        #[arg(short, long, default_value = "testnet")]
+        network: String,
+    },
+    /// Connect wallet
+    ConnectWallet {
+        /// Wallet type (freighter, albedo, lobstr, ledger, trezor)
+        #[arg(long)]
+        wallet_type: String,
+    },
+    /// Validate address
+    ValidateAddress {
+        /// Address to validate
+        #[arg(long)]
+        address: String,
+    },
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -506,6 +723,144 @@ fn main() -> Result<()> {
             timeout_seconds,
         } => {
             verify_transaction(&hash, &network, timeout_seconds)?;
+        },
+        Commands::TxHistory {
+            account,
+            limit,
+            tx_type,
+            order,
+            export_csv,
+            summary,
+            network,
+        } => {
+            get_transaction_history(&account, limit, tx_type.as_deref(), &order, export_csv.as_deref(), summary, &network)?;
+        },
+        Commands::Batch { action } => match action {
+            BatchAction::Execute {
+                file,
+                parallel,
+                continue_on_error,
+                max_concurrent,
+                export_results,
+            } => {
+                execute_batch_operations(&file, parallel, continue_on_error, max_concurrent, export_results.as_deref())?;
+            },
+            BatchAction::CreateTemplate {
+                output,
+                operation_type,
+            } => {
+                create_batch_template(&output, &operation_type)?;
+            },
+        },
+        Commands::Debug { action } => match action {
+            DebugAction::Collect {
+                account,
+                contract,
+                export,
+                network,
+            } => {
+                collect_debug_info(&account, contract.as_deref(), export.as_deref(), &network)?;
+            },
+            DebugAction::AnalyzeFailure {
+                tx_hash,
+                account,
+                network,
+            } => {
+                analyze_transaction_failure(&tx_hash, &account, &network)?;
+            },
+            DebugAction::NetworkStatus {
+                network,
+                detailed,
+            } => {
+                check_network_status(&network, detailed)?;
+            },
+        },
+        Commands::Contract { action } => match action {
+            ContractAction::Info {
+                contract,
+                format,
+                output,
+            } => {
+                get_contract_info(&contract, &format, output.as_deref())?;
+            },
+            ContractAction::Query {
+                contract,
+                method,
+                args,
+                simulate,
+                network,
+            } => {
+                query_contract(&contract, &method, args.as_deref(), simulate, &network)?;
+            },
+            ContractAction::State {
+                contract,
+                export,
+                network,
+            } => {
+                get_contract_state(&contract, export.as_deref(), &network)?;
+            },
+            ContractAction::Template {
+                contract,
+                method,
+                output,
+            } => {
+                generate_contract_template(&contract, &method, output.as_deref())?;
+            },
+        },
+        Commands::Account { action } => match action {
+            AccountAction::Create {
+                save,
+                password,
+                generate_mnemonic,
+            } => {
+                create_account(save, password.as_deref(), generate_mnemonic)?;
+            },
+            AccountAction::Import {
+                private_key,
+                mnemonic,
+                save,
+                password,
+            } => {
+                import_account(private_key.as_deref(), mnemonic.as_deref(), save, password.as_deref())?;
+            },
+            AccountAction::Export {
+                account,
+                password,
+                format,
+            } => {
+                export_account(&account, &password, &format)?;
+            },
+            AccountAction::List { detailed } => {
+                list_accounts(detailed)?;
+            },
+            AccountAction::Balance {
+                account,
+                network,
+            } => {
+                get_account_balance(&account, &network)?;
+            },
+            AccountAction::Signers {
+                account,
+                network,
+            } => {
+                get_account_signers(&account, &network)?;
+            },
+            AccountAction::Fund {
+                account,
+                network,
+            } => {
+                fund_account(&account, &network)?;
+            },
+            AccountAction::ConnectWallet {
+                wallet_type,
+            } => {
+                connect_wallet(&wallet_type)?;
+            },
+            AccountAction::ValidateAddress {
+                address,
+            } => {
+                validate_address(&address)?;
+            },
         },
     }
 
