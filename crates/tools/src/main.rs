@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::env;
 
 mod environment_config;
@@ -15,6 +15,9 @@ use key_manager::KeyManager;
 
 mod encrypted_vault;
 use encrypted_vault::EncryptedVault;
+
+mod keypair_manager;
+use keypair_manager::{MasterKeypair, DistributionAccount, AccountFunding};
 
 fn main() -> Result<()> {
     dotenv::dotenv().ok();
@@ -44,6 +47,7 @@ fn main() -> Result<()> {
         "invoke" => handle_invoke(&args[2..]),
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
+        "keypair" => handle_keypair(&args[2..]),
         _ => {
             println!("Unknown command: {}", args[1]);
             Ok(())
@@ -326,6 +330,140 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
         _ => {
             println!("Unknown keymanager command: {}", args[0]);
             handle_keymanager(&[])?;
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_keypair(args: &[String]) -> Result<()> {
+    if args.is_empty() {
+        println!("🔑 Keypair Management Commands");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Usage: stellaraid-cli keypair <command>");
+        println!();
+        println!("Commands:");
+        println!("  generate-master                      - Generate master keypair");
+        println!("  generate-distribution <issuing_pub>  - Generate distribution account");
+        println!("  show-master                          - Show master keypair");
+        println!("  show-distribution                    - Show distribution account");
+        println!("  fund <account> <amount>              - Fund account on testnet");
+        println!("  validate-master                      - Validate master keypair");
+        println!("  validate-distribution                - Validate distribution account");
+        return Ok(());
+    }
+
+    match args[0].as_str() {
+        "generate-master" => {
+            let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+            
+            println!("🔑 Generating Master Keypair");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            
+            let keypair = MasterKeypair::generate(&network)?;
+            keypair.display_safe();
+            
+            println!();
+            println!("💡 Store this keypair securely:");
+            println!("   stellaraid-cli keymanager encrypt '<password>' '{}'", keypair.secret_key);
+        }
+        "generate-distribution" => {
+            if args.len() < 2 {
+                println!("Usage: stellaraid-cli keypair generate-distribution <issuing_public_key>");
+                return Ok(());
+            }
+            
+            let issuing_pub = &args[1];
+            let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+            
+            println!("💰 Generating Distribution Account");
+            println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            
+            let dist = DistributionAccount::generate(&network, issuing_pub)?;
+            dist.display_safe();
+            
+            println!();
+            println!("💡 Link this distribution account to your issuing account");
+        }
+        "show-master" => {
+            let vault = EncryptedVault::from_env()?;
+            match MasterKeypair::load_from_vault(&vault) {
+                Ok(keypair) => {
+                    keypair.display_safe();
+                }
+                Err(_) => {
+                    println!("❌ Master keypair not found in vault");
+                    println!("💡 Generate it with: stellaraid-cli keypair generate-master");
+                }
+            }
+        }
+        "show-distribution" => {
+            let vault = EncryptedVault::from_env()?;
+            match DistributionAccount::load_from_vault(&vault) {
+                Ok(dist) => {
+                    dist.display_safe();
+                }
+                Err(_) => {
+                    println!("❌ Distribution account not found in vault");
+                    println!("💡 Generate it with: stellaraid-cli keypair generate-distribution <issuing_key>");
+                }
+            }
+        }
+        "fund" => {
+            if args.len() < 3 {
+                println!("Usage: stellaraid-cli keypair fund <account_public_key> <amount_xlm>");
+                return Ok(());
+            }
+            
+            let account_pub = &args[1];
+            let amount: f64 = args[2].parse().context("Invalid amount")?;
+            let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+            
+            let mut funding = AccountFunding::new(account_pub, &network)?;
+            funding.fund_testnet(amount)?;
+            funding.display_status();
+        }
+        "validate-master" => {
+            let vault = EncryptedVault::from_env()?;
+            match MasterKeypair::load_from_vault(&vault) {
+                Ok(keypair) => {
+                    match keypair.validate() {
+                        Ok(_) => {
+                            println!("✅ Master keypair is valid");
+                            keypair.display_safe();
+                        }
+                        Err(e) => {
+                            println!("❌ Master keypair validation failed: {}", e);
+                        }
+                    }
+                }
+                Err(_) => {
+                    println!("❌ Master keypair not found in vault");
+                }
+            }
+        }
+        "validate-distribution" => {
+            let vault = EncryptedVault::from_env()?;
+            match DistributionAccount::load_from_vault(&vault) {
+                Ok(dist) => {
+                    match dist.validate() {
+                        Ok(_) => {
+                            println!("✅ Distribution account is valid");
+                            dist.display_safe();
+                        }
+                        Err(e) => {
+                            println!("❌ Distribution account validation failed: {}", e);
+                        }
+                    }
+                }
+                Err(_) => {
+                    println!("❌ Distribution account not found in vault");
+                }
+            }
+        }
+        _ => {
+            println!("Unknown keypair command: {}", args[0]);
+            handle_keypair(&[])?;
         }
     }
 
