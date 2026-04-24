@@ -19,6 +19,12 @@ use encrypted_vault::EncryptedVault;
 mod keypair_manager;
 use keypair_manager::{MasterKeypair, DistributionAccount, AccountFunding};
 
+mod signing_request;
+use signing_request::{SigningRequest, SigningRequestBuilder, TransactionBuilder};
+
+mod response_handler;
+use response_handler::{ResponseHandler, SignedTransaction};
+
 fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
@@ -34,6 +40,8 @@ fn main() -> Result<()> {
         println!("  deploy     - Deploy contract");
         println!("  invoke     - Invoke contract method");
         println!("  account    - Manage Stellar accounts");
+        println!("  signing    - Build transaction signing requests");
+        println!("  response   - Handle signed transaction responses");
         return Ok(());
     }
 
@@ -48,6 +56,8 @@ fn main() -> Result<()> {
         "account" => handle_account(),
         "keymanager" => handle_keymanager(&args[2..]),
         "keypair" => handle_keypair(&args[2..]),
+        "signing" => handle_signing(&args[2..]),
+        "response" => handle_response(&args[2..]),
         _ => {
             println!("Unknown command: {}", args[1]);
             Ok(())
