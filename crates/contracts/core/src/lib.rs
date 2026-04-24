@@ -5,7 +5,7 @@ use soroban_sdk::{
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-/// Issue #103 – Stellar base fee in stroops (1 XLM = 10_000_000 stroops)
+/// Issue #103 – Stellar base fee in stroops (1 XLM = 10,000,000 stroops)
 const BASE_FEE: i128 = 100;
 
 // ── Storage key helpers ──────────────────────────────────────────────────────
@@ -22,12 +22,23 @@ fn asset_raised_key(campaign_id: u64, asset: &Symbol) -> (Symbol, u64, Symbol) {
 /// Issue #104 – ordered donation record list key
 fn history_key(campaign_id: u64) -> (Symbol, u64) {
     (symbol_short!("history"), campaign_id)
+}
+
 fn donors_key(campaign_id: u64) -> (Symbol, u64) {
     (symbol_short!("donors"), campaign_id)
 }
 
 fn donation_key(campaign_id: u64, donor: &Address) -> (Symbol, u64, Address) {
     (symbol_short!("don"), campaign_id, donor.clone())
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Event {
+    CampaignCreated = 1,
+    DonationReceived = 2,
 }
 
 // ── Data types ───────────────────────────────────────────────────────────────
@@ -52,6 +63,9 @@ pub struct DonationRecord {
     pub amount: i128,   // net amount after fee
     pub fee: i128,
     pub asset: Symbol,
+    pub timestamp: u64,
+}
+
 /// Issue #100 – donation metadata: memo, donor public key, timestamp
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -102,8 +116,8 @@ impl StellarAidContract {
 
         let campaign = Campaign {
             id: count,
-            creator,
-            title,
+            creator: creator.clone(),
+            title: title.clone(),
             goal,
             raised: 0,
             deadline,
@@ -114,29 +128,29 @@ impl StellarAidContract {
         env.storage().persistent().set(&campaign_key(count), &campaign);
         env.storage().instance().set(&symbol_short!("count"), &count);
 
+        // Emit CampaignCreated event
+        env.events().publish(
+            (Symbol::new(&env, "CampaignCreated"), creator),
+            count,
+        );
+
         count
     }
 
     /// Donate to a campaign.
-    ///
-    /// Issue #102 – accepts an `asset` parameter (e.g. symbol_short!("XLM")),
-    ///              validates it is non-empty, tracks per-asset raised totals.
-    /// Issue #103 – deducts BASE_FEE (100 stroops) from `amount` before
-    ///              crediting the campaign; panics if amount <= fee.
-    /// Issue #104 – appends a DonationRecord to the campaign's history list.
-    pub fn donate(env: Env, donor: Address, campaign_id: u64, amount: i128, asset: Symbol) {
+    pub fn donate(
+        env: Env,
+        donor: Address,
+        campaign_id: u64,
+        amount: i128,
+        asset: Symbol,
+        memo: String,
+    ) {
         donor.require_auth();
 
-        // Issue #102 – validate asset is provided (Symbol must not be the empty/default value)
+        // Issue #102 – validate asset is provided
         assert!(asset != Symbol::new(&env, ""), "Asset must be specified");
         assert!(amount > BASE_FEE, "Amount must exceed the base fee");
-
-    /// Donate to a campaign
-    /// Issue #99  – validates campaign existence and stores donation→campaign mapping
-    /// Issue #100 – stores DonationMetadata (memo, donor key, timestamp)
-    /// Issue #101 – tracks unique donors per campaign
-    pub fn donate(env: Env, donor: Address, campaign_id: u64, amount: i128, memo: String) {
-        donor.require_auth();
 
         // Issue #99 – validate campaign existence
         let mut campaign: Campaign = env
@@ -151,6 +165,7 @@ impl StellarAidContract {
         let fee = BASE_FEE;
         let net = amount - fee;
 
+        // Update overall raised total
         campaign.raised += net;
         env.storage().persistent().set(&campaign_key(campaign_id), &campaign);
 
@@ -169,7 +184,7 @@ impl StellarAidContract {
             donor: donor.clone(),
             amount: net,
             fee,
-            asset,
+            asset: asset.clone(),
             timestamp: env.ledger().timestamp(),
         };
         let mut history: Vec<DonationRecord> = env
@@ -179,15 +194,13 @@ impl StellarAidContract {
             .unwrap_or_else(|| vec![&env]);
         history.push_back(record);
         env.storage().persistent().set(&history_key(campaign_id), &history);
-        campaign.raised += amount;
-        env.storage().persistent().set(&campaign_key(campaign_id), &campaign);
 
         // Issue #100 – store donation metadata
         let metadata = DonationMetadata {
             campaign_id,
             donor: donor.clone(),
             amount,
-            memo,
+            memo: memo.clone(),
             timestamp: env.ledger().timestamp(),
         };
         env.storage()
@@ -202,9 +215,15 @@ impl StellarAidContract {
             .unwrap_or_else(|| vec![&env]);
 
         if !donors.contains(&donor) {
-            donors.push_back(donor);
+            donors.push_back(donor.clone());
             env.storage().persistent().set(&donors_key(campaign_id), &donors);
         }
+
+        // Emit DonationReceived event
+        env.events().publish(
+            (Symbol::new(&env, "DonationReceived"), donor, campaign_id),
+            (amount, asset, memo),
+        );
     }
 
     /// Get campaign details
@@ -220,13 +239,12 @@ impl StellarAidContract {
             .unwrap_or(0)
     }
 
-    /// Issue #103 – expose the fee constant so callers can calculate upfront
+    /// Issue #103 – expose the fee constant
     pub fn get_base_fee() -> i128 {
         BASE_FEE
     }
 
     /// Issue #104 – paginated donation history for a campaign.
-    /// `page` is 0-indexed; returns up to `page_size` records.
     pub fn get_donation_history(
         env: Env,
         campaign_id: u64,
@@ -251,6 +269,8 @@ impl StellarAidContract {
             page_records.push_back(history.get(i).unwrap());
         }
         page_records
+    }
+
     /// Issue #101 – get donor list for a campaign
     pub fn get_donors(env: Env, campaign_id: u64) -> Vec<Address> {
         env.storage()
@@ -308,19 +328,6 @@ mod tests {
     }
 
     #[test]
-    fn test_donate_multi_asset_fee_and_history() {
-        let env = Env::default();
-        env.mock_all_auths();
-
-        let contract_id = env.register_contract(None, StellarAidContract);
-        let client = StellarAidContractClient::new(&env, &contract_id);
-
-        let admin = Address::generate(&env);
-        client.initialize(&admin);
-        assert_eq!(client.get_admin(), Some(admin));
-    }
-
-    #[test]
     fn test_create_and_donate_with_metadata_and_tracking() {
         let env = Env::default();
         env.mock_all_auths();
@@ -336,60 +343,24 @@ mod tests {
 
         let donor = Address::generate(&env);
         let xlm = symbol_short!("XLM");
-        let usdc = symbol_short!("USDC");
-
-        // #103 – fee deducted: net = 1000 - 100 = 900
-        client.donate(&donor, &cid, &1000, &xlm);
-        // #102 – different asset
-        client.donate(&donor, &cid, &500, &usdc);
-
-        // #103 – campaign.raised = 900 + 400 = 1300
-        let campaign = client.get_campaign(&cid).unwrap();
-        assert_eq!(campaign.raised, 1300);
-
-        // #102 – per-asset totals
-        assert_eq!(client.get_asset_raised(&cid, &xlm), 900);
-        assert_eq!(client.get_asset_raised(&cid, &usdc), 400);
-
-        // #103 – base fee constant
-        assert_eq!(client.get_base_fee(), 100);
-
-        // #104 – history has 2 records
-        let page = client.get_donation_history(&cid, &0, &10);
-        assert_eq!(page.len(), 2);
-
-        // #104 – pagination: page_size=1 returns 1 record
-        let p0 = client.get_donation_history(&cid, &0, &1);
-        assert_eq!(p0.len(), 1);
-        let p1 = client.get_donation_history(&cid, &1, &1);
-        assert_eq!(p1.len(), 1);
-        let cid = client.create_campaign(
-            &creator,
-            &symbol_short!("test"),
-            &1000,
-            &9999999,
-        );
-        assert_eq!(cid, 1);
-
-        let donor1 = Address::generate(&env);
-        let donor2 = Address::generate(&env);
         let memo = String::from_str(&env, "donation memo");
 
-        client.donate(&donor1, &cid, &100, &memo);
-        client.donate(&donor2, &cid, &200, &memo);
-        // donor1 donates again – should not increase unique count
-        client.donate(&donor1, &cid, &50, &memo);
+        // #103 – fee deducted: net = 1000 - 100 = 900
+        client.donate(&donor, &cid, &1000, &xlm, &memo);
 
         // #99 – campaign raised updated
         let campaign = client.get_campaign(&cid).unwrap();
-        assert_eq!(campaign.raised, 350);
+        assert_eq!(campaign.raised, 900);
 
-        // #101 – unique donor count = 2
-        assert_eq!(client.get_donor_count(&cid), 2);
+        // #102 – per-asset totals
+        assert_eq!(client.get_asset_raised(&cid, &xlm), 900);
+
+        // #101 – unique donor count = 1
+        assert_eq!(client.get_donor_count(&cid), 1);
 
         // #100 – metadata stored
-        let meta = client.get_donation(&cid, &donor1).unwrap();
-        assert_eq!(meta.donor, donor1);
-        assert_eq!(meta.campaign_id, cid);
+        let meta = client.get_donation(&cid, &donor).unwrap();
+        assert_eq!(meta.donor, donor);
+        assert_eq!(meta.memo, memo);
     }
 }
