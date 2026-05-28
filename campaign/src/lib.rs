@@ -79,6 +79,18 @@ impl CampaignContract {
     }
 }
 
+/// Helper function to validate Stellar assets
+/// Ensures each asset has a non-empty asset_code
+fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
+    for asset in assets.iter() {
+        // asset_code must be non-empty
+        if asset.asset_code.len() == 0 {
+            panic_with_error(env, Error::InvalidAssetCode);
+        }
+    }
+    Ok(())
+}
+
 /// Helper function to validate milestone conditions
 fn validate_milestones(
     env: &Env,
@@ -113,6 +125,7 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
         Error::InvalidGoalAmount => "InvalidGoalAmount",
         Error::InvalidEndTime => "InvalidEndTime",
         Error::InvalidAssets => "InvalidAssets",
+        Error::InvalidAssetCode => "InvalidAssetCode",
         Error::InvalidMilestones => "InvalidMilestones",
         Error::MilestoneMismatch => "MilestoneMismatch",
         Error::InvalidCampaignTransition => "InvalidCampaignTransition",
