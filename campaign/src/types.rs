@@ -103,7 +103,7 @@ pub struct CampaignData {
     pub raised_amount: i128,
     pub end_time: u64,
     pub status: CampaignStatus,
-    pub accepted_assets: Vec<AssetInfo>,
+    pub accepted_assets: Vec<StellarAsset>,
     pub milestone_count: u32,
 }
 

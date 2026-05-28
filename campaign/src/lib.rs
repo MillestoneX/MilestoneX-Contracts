@@ -4,7 +4,7 @@ pub mod storage;
 pub mod types;
 
 use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{AssetInfo, CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus};
+use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 #[contract]
@@ -18,6 +18,7 @@ impl CampaignContract {
     /// - `Error::InvalidGoalAmount` if goal_amount <= 0
     /// - `Error::InvalidEndTime` if end_time <= current ledger timestamp
     /// - `Error::InvalidAssets` if accepted_assets is empty
+    /// - `Error::InvalidAssetCode` if any asset_code is empty or invalid
     /// - `Error::InvalidMilestones` if milestones are not sorted ascending by target_amount
     /// - `Error::MilestoneMismatch` if last milestone.target_amount != goal_amount
     pub fn initialize(
@@ -25,7 +26,7 @@ impl CampaignContract {
         creator: soroban_sdk::Address,
         goal_amount: i128,
         end_time: u64,
-        accepted_assets: Vec<AssetInfo>,
+        accepted_assets: Vec<StellarAsset>,
         milestones: Vec<MilestoneData>,
     ) -> Result<(), Error> {
         // Validation 1: goal_amount > 0
@@ -43,6 +44,9 @@ impl CampaignContract {
         if accepted_assets.is_empty() {
             panic_with_error(&env, Error::InvalidAssets);
         }
+
+        // Validation 3b: validate each asset code
+        validate_assets(&env, &accepted_assets)?;
 
         // Validation 4 & 5: milestones sorted ascending and last == goal_amount
         if !milestones.is_empty() {
