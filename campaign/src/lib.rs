@@ -4,7 +4,7 @@ pub mod storage;
 pub mod types;
 
 use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{AssetInfo, CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus};
+use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
@@ -16,20 +16,38 @@ pub struct CampaignContract;
 impl CampaignContract {
     /// Initialize a new campaign with strict validation on all inputs.
     ///
+    /// Requires: Creator authorization via `creator.require_auth()`
+    /// Can only be called once per contract instance
+    ///
     /// # Panics
+    /// - `Error::UnauthorizedCreator` if caller is not the creator or lacks authorization
+    /// - `Error::AlreadyInitialized` if campaign already exists
     /// - `Error::InvalidGoalAmount` if goal_amount <= 0
     /// - `Error::InvalidEndTime` if end_time <= current ledger timestamp
     /// - `Error::InvalidAssets` if accepted_assets is empty
+    /// - `Error::InvalidAssetCode` if any asset_code is empty or invalid
+    /// - `Error::InvalidMilestoneCount` if milestone count is not 1-5
     /// - `Error::InvalidMilestones` if milestones are not sorted ascending by target_amount
     /// - `Error::MilestoneMismatch` if last milestone.target_amount != goal_amount
+    ///
+    /// # Events
+    /// Emits `campaign_initialized` event with campaign details
     pub fn initialize(
         env: Env,
         creator: soroban_sdk::Address,
         goal_amount: i128,
         end_time: u64,
-        accepted_assets: Vec<AssetInfo>,
+        accepted_assets: Vec<StellarAsset>,
         milestones: Vec<MilestoneData>,
     ) -> Result<(), Error> {
+        // Authorization check: creator must authorize this call
+        creator.require_auth();
+
+        // Check if already initialized - can only initialize once
+        if get_campaign(&env).is_some() {
+            panic_with_error(&env, Error::AlreadyInitialized);
+        }
+
         // Validation 1: goal_amount > 0
         if goal_amount <= 0 {
             panic_with_error(&env, Error::InvalidGoalAmount);
@@ -46,20 +64,27 @@ impl CampaignContract {
             panic_with_error(&env, Error::InvalidAssets);
         }
 
-        // Validation 4 & 5: milestones sorted ascending and last == goal_amount
-        if !milestones.is_empty() {
-            validate_milestones(&env, &milestones, goal_amount)?;
+        // Validation 3b: validate each asset code
+        validate_assets(&env, &accepted_assets)?;
+
+        // Validation 4: milestone count must be 1-5
+        let milestone_count = milestones.len() as u32;
+        if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {
+            panic_with_error(&env, Error::InvalidMilestoneCount);
         }
+
+        // Validation 5 & 6: milestones sorted ascending and last == goal_amount
+        validate_milestones(&env, &milestones, goal_amount)?;
 
         // All validations passed, store campaign data
         let campaign = CampaignData {
-            creator,
+            creator: creator.clone(),
             goal_amount,
             raised_amount: 0,
             end_time,
             status: CampaignStatus::Active,
-            accepted_assets,
-            milestone_count: milestones.len() as u32,
+            accepted_assets: accepted_assets.clone(),
+            milestone_count,
         };
 
         set_campaign(&env, &campaign);
@@ -68,6 +93,16 @@ impl CampaignContract {
         for (index, milestone) in milestones.iter().enumerate() {
             set_milestone(&env, index as u32, milestone);
         }
+
+        // Emit campaign_initialized event
+        let event = CampaignEvent::Initialized {
+            creator,
+            goal_amount,
+            end_time,
+            asset_count: accepted_assets.len() as u32,
+            milestone_count,
+        };
+        env.events().publish(("campaign", "initialized"), event);
 
         Ok(())
     }
@@ -79,6 +114,18 @@ impl CampaignContract {
     pub fn version() -> u32 {
         VERSION
     }
+}
+
+/// Helper function to validate Stellar assets
+/// Ensures each asset has a non-empty asset_code
+fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
+    for asset in assets.iter() {
+        // asset_code must be non-empty
+        if asset.asset_code.len() == 0 {
+            panic_with_error(env, Error::InvalidAssetCode);
+        }
+    }
+    Ok(())
 }
 
 /// Helper function to validate milestone conditions
@@ -115,8 +162,12 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
         Error::InvalidGoalAmount => "InvalidGoalAmount",
         Error::InvalidEndTime => "InvalidEndTime",
         Error::InvalidAssets => "InvalidAssets",
+        Error::InvalidAssetCode => "InvalidAssetCode",
         Error::InvalidMilestones => "InvalidMilestones",
         Error::MilestoneMismatch => "MilestoneMismatch",
+        Error::InvalidMilestoneCount => "InvalidMilestoneCount",
+        Error::AlreadyInitialized => "AlreadyInitialized",
+        Error::UnauthorizedCreator => "UnauthorizedCreator",
         Error::InvalidCampaignTransition => "InvalidCampaignTransition",
         Error::InvalidMilestoneTransition => "InvalidMilestoneTransition",
         Error::CampaignNotActive => "CampaignNotActive",
