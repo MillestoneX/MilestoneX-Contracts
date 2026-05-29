@@ -3,8 +3,8 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
+use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent, AssetInfo};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
@@ -105,6 +105,28 @@ impl CampaignContract {
         env.events().publish(("campaign", "initialized"), event);
 
         Ok(())
+    }
+
+    /// Issue #194 – Donate to the campaign, enforcing campaign status.
+    ///
+    /// Panics with `Error::CampaignNotActive` unless status is `Active` or `GoalReached`.
+    /// The status check is atomic with the state update to prevent race conditions.
+    pub fn donate(env: Env, donor: Address, amount: i128, _asset: AssetInfo) {
+        donor.require_auth();
+
+        let mut campaign: CampaignData = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::AlreadyInitialized));
+
+        // Issue #194 – status check: only Active or GoalReached campaigns accept donations
+        match campaign.status {
+            CampaignStatus::Active | CampaignStatus::GoalReached => {}
+            _ => panic_with_error(&env, Error::CampaignNotActive),
+        }
+
+        campaign.raised_amount += amount;
+        set_campaign(&env, &campaign);
+
+        env.events().publish(("campaign", "donation_received"), (donor, amount));
     }
 
     pub fn hello(env: Env) -> soroban_sdk::Symbol {
