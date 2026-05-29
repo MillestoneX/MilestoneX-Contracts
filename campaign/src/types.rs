@@ -1,5 +1,18 @@
 use soroban_sdk::{contracttype, Address, BytesN, Vec};
 
+// ── Error enum ──────────────────────────────────────────────────────────────
+
+/// Initialization validation errors
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Error {
+    InvalidGoalAmount,    // goal_amount must be > 0
+    InvalidEndTime,       // end_time must be > current ledger timestamp
+    InvalidAssets,        // accepted_assets must be non-empty
+    InvalidMilestones,    // milestones must be sorted ascending and last must equal goal
+    MilestoneMismatch,    // last milestone.target_amount != goal_amount
+}
+
 // ── Supporting enums ─────────────────────────────────────────────────────────
 
 /// Issue #167 – campaign lifecycle status
