@@ -3,8 +3,8 @@
 pub mod storage;
 pub mod types;
 
-use soroban_sdk::{contract, contractimpl, Env, Vec};
-use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent};
+use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+use types::{CampaignData, CampaignStatus, Error, MilestoneData, MilestoneStatus, StellarAsset, CampaignEvent, AssetInfo};
 use storage::{get_campaign, set_campaign, set_milestone};
 
 pub const VERSION: u32 = 1;
@@ -105,6 +105,27 @@ impl CampaignContract {
         env.events().publish(("campaign", "initialized"), event);
 
         Ok(())
+    }
+
+    /// Issue #193 – Donate to the campaign, enforcing the campaign deadline.
+    ///
+    /// Panics with `Error::CampaignEnded` if `env.ledger().timestamp() > campaign.end_time`.
+    /// The check is atomic with the state update to prevent race conditions.
+    pub fn donate(env: Env, donor: Address, amount: i128, _asset: AssetInfo) {
+        donor.require_auth();
+
+        let mut campaign: CampaignData = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::AlreadyInitialized));
+
+        // Issue #193 – deadline enforcement: reject donations after end_time
+        if env.ledger().timestamp() > campaign.end_time {
+            panic_with_error(&env, Error::CampaignEnded);
+        }
+
+        campaign.raised_amount += amount;
+        set_campaign(&env, &campaign);
+
+        env.events().publish(("campaign", "donation_received"), (donor, amount));
     }
 
     pub fn hello(env: Env) -> soroban_sdk::Symbol {
