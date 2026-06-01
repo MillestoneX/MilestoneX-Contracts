@@ -490,3 +490,21 @@ pub struct RefundProcessedEvent {
     pub asset: AssetInfo,
     pub ledger: u32,
 }
+
+use soroban_sdk::contracttype;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub enum CampaignStatus {
+    Active,
+    Successful,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[contracttype]
+pub struct CampaignStatusResponse {
+    pub status: CampaignStatus,
+    pub days_remaining: i64,
+}
