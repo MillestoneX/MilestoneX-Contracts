@@ -58,19 +58,21 @@ Emitted once per milestone when its target is first reached. Not re-emitted if t
 
 ## `milestone_released`
 
-Emitted when a milestone's funds are released to the beneficiary.
+Emitted after each successful token transfer during milestone release.
+When a multi-asset release transfers tokens from multiple assets, a separate event
+is emitted per asset.
 
-**Topics:** `["campaign", "milestone_released"]`
+**Topics:** `["milestone_released", contract_address]`
 
 **Data:**
 
 | Field | Type | Description |
 |---|---|---|
 | `milestone_index` | `u32` | Zero-based milestone index |
-| `scheduled_release` | `i128` | Amount scheduled for release |
-| `total_released` | `i128` | Cumulative released amount for this milestone |
-| `assets_released` | `u32` | Number of asset types released |
+| `amount` | `i128` | Amount transferred in this asset's base units |
+| `asset_code` | `String` | Asset code (e.g. `"XLM"`, `"USDC"`) |
 | `recipient` | `Address` | Address that received the funds |
+| `timestamp` | `u64` | Ledger timestamp of the release |
 
 ---
 

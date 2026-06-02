@@ -1,4 +1,5 @@
 use soroban_sdk::{Address, Env, token};
+use crate::event;
 use crate::types::{Error, MilestoneStatus};
 use crate::storage::{get_campaign, get_milestone, set_milestone};
 
@@ -30,6 +31,8 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
         .checked_sub(milestone.released_amount)
         .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, Error::Overflow));
 
+    let timestamp = env.ledger().timestamp();
+
     // Transfer each accepted asset proportionally
     for asset in campaign.accepted_assets.iter() {
         if let Some(issuer) = asset.issuer.clone() {
@@ -38,6 +41,15 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
             if asset_balance > 0 && release_amount > 0 {
                 let transfer_amount = release_amount.min(asset_balance);
                 token_client.transfer(&env.current_contract_address(), &recipient, &transfer_amount);
+
+                event::milestone_released(
+                    env,
+                    milestone_index,
+                    transfer_amount,
+                    asset.asset_code.clone(),
+                    &recipient,
+                    timestamp,
+                );
             }
         }
     }
@@ -45,9 +57,4 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
     milestone.released_amount = milestone.target_amount;
     milestone.status = MilestoneStatus::Released;
     set_milestone(env, milestone_index, &milestone);
-
-    env.events().publish(
-        ("milestone", "released"),
-        (milestone_index, release_amount, recipient),
-    );
 }

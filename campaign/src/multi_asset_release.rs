@@ -1,6 +1,7 @@
 
 
 use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env, Vec};
+use crate::event;
 use crate::types::{Error, MilestoneStatus, StellarAsset};
 use crate::storage::{
     get_campaign, get_milestone, set_milestone,
@@ -122,8 +123,8 @@ pub fn release_milestone_multi_asset(
     set_milestone(env, milestone_index, &milestone);
 
     // ── 7. Execute proportional transfers ───────────────────────────────────
+    let timestamp = env.ledger().timestamp();
     let mut total_released: i128 = 0;
-    let mut assets_released: u32 = 0;
 
     for asset in campaign.accepted_assets.iter() {
         let token_address = match &asset.issuer {
@@ -176,6 +177,16 @@ pub fn release_milestone_multi_asset(
             &clamped_release,
         );
 
+        // Emit per-asset milestone_released event
+        event::milestone_released(
+            env,
+            milestone_index,
+            clamped_release,
+            asset.asset_code.clone(),
+            &recipient,
+            timestamp,
+        );
+
         // Update per-asset accounting
         let new_asset_raised = asset_raised
             .checked_sub(clamped_release)
@@ -186,7 +197,6 @@ pub fn release_milestone_multi_asset(
         total_released = total_released
             .checked_add(clamped_release)
             .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
-        assets_released += 1;
     }
 
     // ── 8. Update global total-raised bookkeeping ────────────────────────────
@@ -196,17 +206,6 @@ pub fn release_milestone_multi_asset(
         .max(0);
     storage_set_total_raised(env, new_total_raised);
 
-    // ── 9. Emit structured event ─────────────────────────────────────────────
-    env.events().publish(
-        (symbol_short!("milestone"), symbol_short!("ms_rel")),
-        (
-            milestone_index,
-            milestone_release,   // amount scheduled for release
-            total_released,      // amount actually transferred (may differ by dust)
-            assets_released,     // number of assets touched
-            recipient.clone(),
-        ),
-    );
 }
 
 // ─── Unit tests ───────────────────────────────────────────────────────────────

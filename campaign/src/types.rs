@@ -471,16 +471,16 @@ pub struct DonationReceivedEvent {
     pub ledger: u32,
 }
 
-/// Emitted by `release_milestone_multi_asset`.
+/// Emitted by `release_milestone` and `release_milestone_multi_asset`.
+/// One event per asset transfer.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MilestoneReleasedEvent {
     pub milestone_index: u32,
-    pub scheduled_release: i128,
-    pub total_released: i128,
-    pub assets_released: u32,
+    pub amount: i128,
+    pub asset_code: String,
     pub recipient: Address,
-    pub ledger: u32,
+    pub timestamp: u64,
 }
 
 /// Emitted by campaign status transitions.
