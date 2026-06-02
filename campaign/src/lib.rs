@@ -11,16 +11,8 @@ pub mod types;
 pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec};
-use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse,
-    DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset,
-};
-use storage::{
-    get_campaign, get_donor, get_donor_asset_donation, get_milestone, increment_donor_asset_donation,
-    set_campaign, set_donor, set_milestone, set_total_raised,
-    storage_get_total_raised as storage_get_total_raised, set_total_raised as storage_set_total_raised,
-    acquire_lock, release_lock,
-};
+use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
+use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation};
 
 pub const VERSION: u32 = 1;
 
@@ -95,7 +87,7 @@ impl CampaignContract {
             milestone_count,
             min_donation_amount,
             created_at_ledger: env.ledger().sequence(),
-            created_at_time: current_timestamp,
+            created_at_time: env.ledger().timestamp(),
             concluded_at_ledger: None,
         };
 
@@ -556,6 +548,13 @@ fn validate_milestones(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    pub mod refund_eligibility_tests;
+    pub mod claim_refund_tests;
+    pub mod integration_tests;
 }
 
 /// Resolves the asset code string for an AssetInfo.
