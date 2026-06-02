@@ -41,3 +41,15 @@ pub fn campaign_cancelled(env: &Env, creator: &Address) {
 pub fn campaign_ended(env: &Env) {
     env.events().publish(("campaign", "campaign_ended"), ());
 }
+
+pub fn milestone_released(
+    env: &Env,
+    milestone_index: u32,
+    amount: i128,
+    asset_code: String,
+    recipient: &Address,
+    timestamp: u64,
+) {
+    let topics = (Symbol::new(env, "milestone_released"), env.current_contract_address());
+    env.events().publish(topics, (milestone_index, amount, asset_code, recipient, timestamp));
+}
