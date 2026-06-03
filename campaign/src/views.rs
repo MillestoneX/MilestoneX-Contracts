@@ -4,7 +4,7 @@
 //! (`pending_release`, `is_fully_released`, `is_next_pending`) that
 //! are derived from the raw `MilestoneData` stored on-chain.
 
-use soroban_sdk::{panic_with_error, Env};
+use soroban_sdk::{contracttype, panic_with_error, Env};
 
 use crate::storage::{get_campaign, get_milestone};
 use crate::types::{Error, MilestoneData, MilestoneStatus};
@@ -13,6 +13,7 @@ use crate::types::{Error, MilestoneData, MilestoneStatus};
 
 /// Enriched milestone view with computed fields derived from the raw stored
 /// `MilestoneData` and the current campaign state.
+#[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MilestoneView {
     /// The raw milestone data from storage.
