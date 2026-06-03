@@ -74,6 +74,10 @@ mod tests {
             status: CampaignStatus::Active,
             milestone_count,
             accepted_assets: soroban_sdk::Vec::new(env),
+            min_donation_amount: 0,
+            created_at_ledger: env.ledger().sequence(),
+            created_at_time: env.ledger().timestamp(),
+            concluded_at_ledger: None,
         };
         env.storage()
             .persistent()

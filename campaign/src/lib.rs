@@ -12,6 +12,7 @@ pub mod release_milestone;
 pub mod multi_asset_release;
 pub mod views;
 
+use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
 use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
 use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen};
@@ -697,6 +698,9 @@ pub fn validate_milestone_transition(
 
 #[cfg(test)]
 mod test {
-    pub mod refund_eligibility_tests;
+    pub mod claim_refund_tests;
+    pub mod get_campaign_status_tests;
+    pub mod integration_tests;
     pub mod negative_path_tests;
+    pub mod refund_eligibility_tests;
 }
