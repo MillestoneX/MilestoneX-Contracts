@@ -8,6 +8,7 @@ pub fn campaign_id_from_memo(memo: &str) -> Option<u64> {
 }
 
 /// Returns true when the payment memo matches the expected campaign.
+#[must_use]
 pub fn matches_campaign(memo: &str, campaign_id: u64) -> bool {
     campaign_id_from_memo(memo) == Some(campaign_id)
 }
@@ -34,5 +35,20 @@ mod tests {
     #[test]
     fn matches_campaign_false_for_wrong_id() {
         assert!(!matches_campaign("campaign:7", 99));
+    }
+
+    #[test]
+    fn handles_empty_memo() {
+        assert_eq!(campaign_id_from_memo(""), None);
+    }
+
+    #[test]
+    fn handles_memo_with_whitespace() {
+        assert_eq!(campaign_id_from_memo("campaign:  42  "), Some(42));
+    }
+
+    #[test]
+    fn handles_invalid_number() {
+        assert_eq!(campaign_id_from_memo("campaign:abc"), None);
     }
 }
