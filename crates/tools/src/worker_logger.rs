@@ -35,6 +35,16 @@ pub enum HealthStatus {
     Failed,
 }
 
+impl fmt::Display for HealthStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HealthStatus::Healthy => write!(f, "Healthy"),
+            HealthStatus::Degraded => write!(f, "Degraded"),
+            HealthStatus::Failed => write!(f, "Failed"),
+        }
+    }
+}
+
 /// Minimal logger that stores entries in memory and prints them to stderr.
 #[derive(Default)]
 pub struct WorkerLogger {
@@ -69,11 +79,13 @@ impl WorkerLogger {
     }
 
     /// Returns all stored log entries.
+    #[must_use]
     pub fn entries(&self) -> &[LogEntry] {
         &self.entries
     }
 
     /// Issue #128 – return current health status based on consecutive errors.
+    #[must_use]
     pub fn health_status(&self) -> HealthStatus {
         match self.consecutive_errors {
             0 => HealthStatus::Healthy,
@@ -83,6 +95,7 @@ impl WorkerLogger {
     }
 
     /// Issue #128 – returns true if the worker is healthy.
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.health_status() == HealthStatus::Healthy
     }
