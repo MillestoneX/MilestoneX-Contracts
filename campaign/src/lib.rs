@@ -8,13 +8,10 @@ pub mod multi_asset_release;
 pub mod release_milestone;
 pub mod storage;
 pub mod types;
-pub mod release_milestone;
-pub mod multi_asset_release;
 pub mod views;
 
-use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
+use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
 use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen};
 
 pub const VERSION: u32 = 1;
@@ -623,14 +620,6 @@ fn validate_milestones(
     Ok(())
 }
 
-#[cfg(test)]
-mod test {
-    pub mod refund_eligibility_tests;
-    pub mod claim_refund_tests;
-    pub mod integration_tests;
-    pub mod release_milestone_tests;
-}
-
 /// Resolves the asset code string for an AssetInfo.
 /// For Native XLM returns "XLM"; for Stellar(addr) looks up the code in accepted_assets.
 fn resolve_asset_code(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> String {
@@ -703,4 +692,5 @@ mod test {
     pub mod integration_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
+    pub mod release_milestone_tests;
 }
