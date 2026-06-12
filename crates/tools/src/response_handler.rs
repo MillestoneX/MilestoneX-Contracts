@@ -41,7 +41,8 @@ impl std::fmt::Display for TransactionStatus {
 pub struct ResponseHandler;
 
 impl ResponseHandler {
-    /// Parse signed transaction from JSON response
+    /// Parse signed transaction from JSON response.
+    #[must_use]
     pub fn parse_response(response_json: &str) -> Result<SignedTransaction> {
         let parsed: serde_json::Value =
             serde_json::from_str(response_json)
