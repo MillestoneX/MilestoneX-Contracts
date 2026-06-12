@@ -85,7 +85,8 @@ impl EncryptedVault {
         Ok(vault)
     }
 
-    /// Store an encrypted secret key in the vault
+    /// Store an encrypted secret key in the vault.
+    #[must_use]
     pub fn store_secret_key(&mut self, key_name: &str, secret_key: &str) -> Result<()> {
         // Validate key format
         KeyManager::validate_secret_key(secret_key)?;
@@ -103,7 +104,8 @@ impl EncryptedVault {
         Ok(())
     }
 
-    /// Retrieve and decrypt a secret key from the vault
+    /// Retrieve and decrypt a secret key from the vault.
+    #[must_use]
     pub fn retrieve_secret_key(&self, key_name: &str) -> Result<String> {
         // Get encrypted key
         let encrypted_hex = self
@@ -122,14 +124,16 @@ impl EncryptedVault {
         key_manager.decrypt_key(&encrypted)
     }
 
-    /// Store a public key (unencrypted)
+    /// Store a public key (unencrypted).
+    #[must_use]
     pub fn store_public_key(&mut self, key_name: &str, public_key: &str) -> Result<()> {
         KeyManager::validate_public_key(public_key)?;
         self.public_keys.insert(key_name.to_string(), public_key.to_string());
         Ok(())
     }
 
-    /// Retrieve a public key from the vault
+    /// Retrieve a public key from the vault.
+    #[must_use]
     pub fn retrieve_public_key(&self, key_name: &str) -> Result<String> {
         self.public_keys
             .get(key_name)
@@ -225,7 +229,8 @@ impl EncryptedVault {
         }
     }
 
-    /// Export vault configuration as environment variables
+    /// Export vault configuration as environment variables.
+    #[must_use]
     pub fn export_to_env_vars(&self) -> Vec<(String, String)> {
         let mut vars = Vec::new();
 
