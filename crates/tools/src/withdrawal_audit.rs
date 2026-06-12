@@ -57,16 +57,19 @@ impl WithdrawalAuditLog {
     }
 
     /// Returns all log entries for a campaign.
+    #[must_use]
     pub fn get_by_campaign(&self, campaign_id: u64) -> Vec<&WithdrawalLogEntry> {
         self.entries.iter().filter(|e| e.campaign_id == campaign_id).collect()
     }
 
     /// Returns all entries in the log.
+    #[must_use]
     pub fn all(&self) -> &[WithdrawalLogEntry] {
         &self.entries
     }
 
     /// Returns a summary: count of each action type per campaign.
+    #[must_use]
     pub fn summary(&self) -> HashMap<u64, HashMap<String, usize>> {
         let mut result: HashMap<u64, HashMap<String, usize>> = HashMap::new();
         for entry in &self.entries {
