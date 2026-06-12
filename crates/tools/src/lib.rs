@@ -1,3 +1,8 @@
+//! OrbitChain Tools — CLI and library for Soroban contract management.
+//!
+//! Provides modules for environment configuration, secure key management,
+//! transaction signing, asset issuing, and campaign payment processing.
+
 pub mod key_manager;
 pub mod encrypted_vault;
 pub mod environment_config;
