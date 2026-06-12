@@ -3,14 +3,16 @@ use soroban_sdk::contracterror;
 /// Campaign-specific error codes for deadline extension, cancellation, and
 /// contract lifecycle operations that fall outside the core campaign flow.
 ///
-/// This enum complements `crate::types::Error` and is used only by the
+/// This enum complements [`crate::types::Error`] and is used only by the
 /// standalone helper functions in `contract.rs`.
+///
+/// Each variant has a stable `u32` discriminant — never renumber.
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CampaignError {
-    /// Caller is not the campaign creator.
+    /// Caller is not the campaign creator (requires creator auth).
     Unauthorized = 1,
-    /// The new deadline is not later than the current deadline.
+    /// The new deadline is not strictly later than the current deadline.
     InvalidDeadline = 2,
     /// The deadline has already been extended the maximum number of times.
     ExtensionLimitExceeded = 3,
