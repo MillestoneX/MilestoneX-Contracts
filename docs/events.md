@@ -157,6 +157,52 @@ Emitted when the campaign creator extends the campaign deadline.
 
 ---
 
+## `contract_upgraded`
+
+Emitted when the contract WASM hash is upgraded by the admin.
+
+**Topics:** `("campaign", "contract_upgraded")`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `admin` | `Address` | Admin (creator) address |
+| `new_wasm_hash` | `BytesN<32>` | New WASM hash being deployed |
+| `timestamp` | `u64` | Ledger timestamp of the upgrade |
+
+---
+
+## `contract_frozen`
+
+Emitted when the contract is frozen by the admin, blocking all mutating operations.
+
+**Topics:** `("campaign", "contract_frozen")`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `admin` | `Address` | Admin (creator) address |
+| `timestamp` | `u64` | Ledger timestamp of the freeze |
+
+---
+
+## `contract_unfrozen`
+
+Emitted when the contract is unfrozen by the admin, re-enabling mutating operations.
+
+**Topics:** `("campaign", "contract_unfrozen")`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `admin` | `Address` | Admin (creator) address |
+| `timestamp` | `u64` | Ledger timestamp of the unfreeze |
+
+---
+
 ## Naming Convention
 
 - Event names use `snake_case`.
