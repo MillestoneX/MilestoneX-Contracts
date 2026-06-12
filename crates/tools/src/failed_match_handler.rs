@@ -1,5 +1,5 @@
 /// Represents a payment transaction that could not be matched to a campaign.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnmatchedPayment {
     pub transaction_hash: String,
     pub memo: Option<String>,
@@ -34,6 +34,7 @@ impl UnmatchedPayment {
 }
 
 /// Logs an unmatched payment to stderr so it is visible in worker output.
+#[inline]
 pub fn log_unmatched(payment: &UnmatchedPayment) {
     eprintln!(
         "[UNMATCHED] tx={} memo={:?} amount={} retries={}",
