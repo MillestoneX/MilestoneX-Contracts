@@ -54,4 +54,24 @@ mod tests {
         let result: Result<i32, &str> = with_retry(3, Duration::from_millis(1), || Err("fail"));
         assert_eq!(result, Err("fail"));
     }
+
+    #[test]
+    #[should_panic(expected = "max_attempts must be > 0")]
+    fn panics_on_zero_attempts() {
+        let _: Result<i32, &str> = with_retry(0, Duration::from_millis(1), || Ok(42));
+    }
+
+    #[test]
+    fn delay_increases_exponentially() {
+        let mut calls = 0u32;
+        let start = std::time::Instant::now();
+        let result: Result<i32, &str> = with_retry(4, Duration::from_millis(2), || {
+            calls += 1;
+            if calls < 4 { Err("transient") } else { Ok(1) }
+        });
+        let elapsed = start.elapsed();
+        // After 3 failures: 2ms + 4ms + 8ms = 14ms minimum
+        assert!(result.is_ok());
+        assert!(elapsed >= Duration::from_millis(10));
+    }
 }
