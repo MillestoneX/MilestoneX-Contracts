@@ -1,3 +1,8 @@
+//! OrbitChain campaign smart contract.
+//!
+//! Manages the full campaign lifecycle: initialize, donate, release milestones,
+//! refunds, freeze/upgrade, and campaign status management on Stellar Soroban.
+
 #![no_std]
 
 pub mod contract;

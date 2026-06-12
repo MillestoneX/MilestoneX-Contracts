@@ -1,7 +1,10 @@
 //! Common types shared across the OrbitChain workspace.
 //!
-//! This crate provides canonical definitions for CampaignStatus, MilestoneStatus,
-//! AssetInfo, and ErrorCode used by both campaign and core contracts.
+//! This crate provides canonical definitions for `CampaignStatus`, `MilestoneStatus`,
+//! `AssetInfo`, and `ErrorCode` used by both campaign and core contracts.
+//!
+//! # Versioning
+//! All discriminants are stable — never renumber existing variants.
 
 #![no_std]
 use soroban_sdk::{contracttype, contracterror};

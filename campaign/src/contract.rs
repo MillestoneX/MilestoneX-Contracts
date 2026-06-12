@@ -96,9 +96,10 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
     event::deadline_extended(env, &campaign.creator, old_deadline, new_end_time);
 }
 
-/// Issue #235 – Get campaign status with computed fields.
+/// Issue #235 — Get campaign status with computed fields.
 ///
 /// Returns the current `CampaignStatus` and `days_remaining` until deadline.
+/// Negative `days_remaining` means the deadline has passed.
 /// No auth required (read-only view).
 ///
 /// # Panics

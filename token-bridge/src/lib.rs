@@ -1,4 +1,7 @@
 //! Token bridge contract for cross-chain asset transfers.
+//!
+//! Provides a minimal Soroban contract skeleton with `hello` (ping) and `version`
+//! endpoints. Extend this contract to implement full cross-chain bridging logic.
 
 #![no_std]
 use soroban_sdk::{contract, contractimpl, Env};

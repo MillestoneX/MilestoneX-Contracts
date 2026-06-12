@@ -3,6 +3,7 @@ name = "orbitchain-core"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+description = "OrbitChain core smart contract — campaign lifecycle, donations, and analytics"
 
 [lib]
 crate-type = ["cdylib", "lib"]
