@@ -176,6 +176,7 @@ pub fn storage_get_total_raised(env: &Env) -> i128 {
 
 /// Persist the global total-raised counter.
 /// Panics if `amount` is negative — total raised must never go below zero.
+#[inline]
 pub fn storage_set_total_raised(env: &Env, amount: i128) {
     if amount < 0 {
         panic_with_error!(env, Error::InvalidAmount);
@@ -188,6 +189,7 @@ pub fn storage_set_total_raised(env: &Env, amount: i128) {
 
 /// Atomically add `delta` to total raised using checked arithmetic.
 /// Returns the new total.
+#[inline]
 pub fn storage_increment_total_raised(env: &Env, delta: i128) -> i128 {
     if delta <= 0 {
         panic_with_error!(env, Error::InvalidAmount);
