@@ -1,7 +1,8 @@
 use anyhow::{Result, Context};
 use std::collections::HashMap;
 
-/// Security test suite for comprehensive vulnerability testing
+/// Security test suite for comprehensive vulnerability testing.
+/// All methods are static — instantiate with `SecurityTestSuite` to run.
 pub struct SecurityTestSuite;
 
 impl SecurityTestSuite {
