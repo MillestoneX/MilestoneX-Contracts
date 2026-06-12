@@ -4,7 +4,7 @@ use std::collections::HashMap;
 /// Issue #140 – Audit Withdrawal Logs
 /// Records every withdrawal action with a complete audit trail.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WithdrawalAction {
     Requested,
     Approved,
