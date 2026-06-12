@@ -37,3 +37,8 @@ deployments/*.json
 /tmp
 *.log
 *.enc
+
+# Test coverage
+tarpaulin-report.html
+cobertura.xml
+tarpaulin-ci/
