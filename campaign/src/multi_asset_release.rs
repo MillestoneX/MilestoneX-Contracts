@@ -12,6 +12,9 @@ use crate::storage::{
 /// Minimum transfer amount — prevents dust transfers that waste fees.
 const MIN_TRANSFER_AMOUNT: i128 = 1;
 
+/// Maximum accepted assets per campaign to prevent unbounded loop gas costs.
+const MAX_ACCEPTED_ASSETS: usize = 20;
+
 // ─── Helper: proportional release ────────────────────────────────────────────
 
 /// Computes the proportional release for a single asset using integer arithmetic.
