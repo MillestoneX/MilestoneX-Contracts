@@ -123,13 +123,15 @@ impl TransactionBuilder {
 }
 
 impl SigningRequest {
-    /// Convert signing request to JSON for transmission
+    /// Convert signing request to JSON for transmission.
+    #[must_use]
     pub fn to_json(&self) -> Result<String> {
         serde_json::to_string_pretty(self)
             .context("Failed to serialize signing request to JSON")
     }
 
-    /// Create from JSON string
+    /// Create from JSON string.
+    #[must_use]
     pub fn from_json(json: &str) -> Result<Self> {
         serde_json::from_str(json)
             .context("Failed to deserialize signing request from JSON")
