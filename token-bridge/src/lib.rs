@@ -1,3 +1,5 @@
+//! Token bridge contract for cross-chain asset transfers.
+
 #![no_std]
 use soroban_sdk::{contract, contractimpl, Env};
 
@@ -8,5 +10,10 @@ pub struct TokenBridgeContract;
 impl TokenBridgeContract {
     pub fn hello(env: Env) -> soroban_sdk::Symbol {
         soroban_sdk::Symbol::new(&env, "token_bridge")
+    }
+
+    /// Returns the contract version.
+    pub fn version() -> u32 {
+        1
     }
 }
