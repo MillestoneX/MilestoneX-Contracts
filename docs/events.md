@@ -116,6 +116,31 @@ Emitted when a donor successfully claims a refund.
 
 ---
 
+## `refund_claimed`
+
+Emitted when a donor successfully claims a refund.
+
+**Topics:** `["campaign", "refund_claimed"]`
+
+**Data:**
+
+| Field | Type | Description |
+|---|---|---|
+| `donor` | `Address` | Donor's Stellar address |
+| `total_donated` | `i128` | Total amount donated by this donor |
+
+---
+
+## `campaign_goal_reached`
+
+Emitted when the campaign's raised amount reaches or exceeds the goal.
+
+**Topics:** `["campaign", "campaign_goal_reached"]`
+
+**Data:** `i128` — cumulative raised amount at the time the goal was reached.
+
+---
+
 ## `deadline_extended`
 
 Emitted when the campaign creator extends the campaign deadline.
