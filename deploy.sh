@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# deploy.sh - Deploy OrbitChain core contract and store the contract ID
+# deploy.sh — Deploy OrbitChain core contract and store the contract ID.
+#
+# Usage: bash deploy.sh
+#
+# Environment:
+#   SOROBAN_NETWORK   — testnet (default) | mainnet
+#   SOROBAN_ACCOUNT   — source account name
+#
 # Closes #96
 
 set -euo pipefail
