@@ -1,3 +1,8 @@
+//! Chunked PDF certificate generator.
+//!
+//! Generates PDF certificates from campaign donation data with support for
+//! large datasets via chunked processing and streaming mode.
+
 use anyhow::{Result, Context, anyhow};
 use serde::{Serialize, Deserialize};
 use std::time::{Duration, Instant};
