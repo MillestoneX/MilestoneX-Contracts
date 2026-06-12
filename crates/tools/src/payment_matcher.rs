@@ -1,6 +1,7 @@
-/// Extracts the campaign ID from a Stellar payment memo.
+/// Extract the campaign ID from a Stellar payment memo.
 ///
 /// Convention: memo text is `"campaign:<id>"`, e.g. `"campaign:42"`.
+#[must_use]
 pub fn campaign_id_from_memo(memo: &str) -> Option<u64> {
     let stripped = memo.strip_prefix("campaign:")?;
     stripped.trim().parse::<u64>().ok()
