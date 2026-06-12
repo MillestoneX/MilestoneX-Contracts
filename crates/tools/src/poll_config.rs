@@ -53,3 +53,50 @@ impl PollConfig {
         self.interval = self.default_interval;
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_interval_is_10_seconds() {
+        let config = PollConfig::default();
+        assert_eq!(config.interval, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn high_frequency_interval_is_5_seconds() {
+        let config = PollConfig::high_frequency();
+        assert_eq!(config.interval, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn low_frequency_interval_is_30_seconds() {
+        let config = PollConfig::low_frequency();
+        assert_eq!(config.interval, Duration::from_secs(30));
+    }
+
+    #[test]
+    fn back_off_doubles_interval() {
+        let mut config = PollConfig::default();
+        config.back_off();
+        assert_eq!(config.interval, Duration::from_secs(20));
+    }
+
+    #[test]
+    fn back_off_respects_max() {
+        let mut config = PollConfig::default();
+        for _ in 0..10 { config.back_off(); }
+        assert_eq!(config.interval, config.max_interval);
+    }
+
+    #[test]
+    fn reset_restores_original_interval() {
+        let mut config = PollConfig::high_frequency();
+        config.back_off();
+        config.back_off();
+        config.reset();
+        assert_eq!(config.interval, Duration::from_secs(5));
+    }
+}
