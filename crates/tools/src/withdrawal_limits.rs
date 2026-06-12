@@ -37,6 +37,7 @@ impl WithdrawalLimits {
 
     /// Validates a proposed withdrawal amount against the limits.
     /// `already_withdrawn` is the cumulative amount already withdrawn for this campaign.
+    #[must_use]
     pub fn validate(&self, amount: i128, already_withdrawn: i128) -> Result<()> {
         if amount < self.min_per_withdrawal {
             return Err(anyhow!(
