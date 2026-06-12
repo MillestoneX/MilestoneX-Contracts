@@ -2,7 +2,6 @@ use anyhow::{Result, Context, anyhow};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 use std::fs;
-use std::path::Path;
 
 /// Represents a signed transaction response from a wallet
 #[derive(Debug, Clone, Serialize, Deserialize)]
