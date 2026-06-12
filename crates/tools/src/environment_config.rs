@@ -88,7 +88,9 @@ impl EnvironmentConfig {
         }
     }
 
-    pub fn validate(&self) -> Result<()> {
+    /// Validate configuration — checks active network URLs and passphrase.
+    #[must_use]
+    pub fn validate(&self) -> Result<()>
         let active = self.get_active_network()?;
 
         if active.rpc_url.is_empty() {
