@@ -100,6 +100,10 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
 ///
 /// Returns the current `CampaignStatus` and `days_remaining` until deadline.
 /// No auth required (read-only view).
+///
+/// # Panics
+/// - `Error::NotInitialized` if campaign not initialized
+#[must_use]
 pub fn get_campaign_status(env: &Env) -> crate::types::CampaignStatusResponse {
     use crate::types::CampaignStatusResponse;
     
