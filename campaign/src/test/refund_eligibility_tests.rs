@@ -1,3 +1,8 @@
+//! Tests for `CampaignContract::is_refund_eligible` decision logic.
+//!
+//! Validates all five eligibility criteria: terminal state, status rules,
+//! refund window, donor record existence, and no prior claim.
+
 #![cfg(test)]
 
 use soroban_sdk::testutils::Address as AddressTestUtils;
