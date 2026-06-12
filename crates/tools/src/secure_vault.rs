@@ -23,7 +23,8 @@ impl SecureVault {
         }
     }
 
-    /// Validate that required keys are present for mainnet operations
+    /// Validate that required keys are present for mainnet operations.
+    #[must_use]
     pub fn validate_for_mainnet(&self) -> Result<()> {
         if self.admin_secret_key.is_none() {
             anyhow::bail!("SOROBAN_ADMIN_SECRET_KEY is required for mainnet operations");
@@ -50,6 +51,7 @@ impl SecureVault {
     }
 
     /// Validate keys for testnet (permissive — allows empty/unset keys).
+    #[must_use]
     pub fn validate_for_testnet(&self) -> Result<()> {
         if let Some(secret) = &self.admin_secret_key {
             if !secret.is_empty() && !secret.starts_with('S') {
