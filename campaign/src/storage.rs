@@ -49,6 +49,7 @@ pub fn set_campaign(env: &Env, data: &CampaignData) {
 
 /// Load the campaign record and refresh its TTL.
 /// Returns `None` only before the contract is initialised.
+#[must_use]
 pub fn get_campaign(env: &Env) -> Option<CampaignData> {
     let value = env
         .storage()
@@ -61,6 +62,7 @@ pub fn get_campaign(env: &Env) -> Option<CampaignData> {
 /// Same as `get_campaign` but panics with `NotInitialized` instead of
 /// returning `None`. Use this in every function that requires an initialised
 /// contract — it removes the repetitive `unwrap_or_else` boilerplate.
+#[must_use]
 pub fn get_campaign_or_panic(env: &Env) -> CampaignData {
     get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized))
 }
@@ -76,6 +78,7 @@ pub fn set_milestone(env: &Env, index: u32, data: &MilestoneData) {
 
 /// Load a milestone by index and refresh its TTL.
 /// Returns `None` when `index` is out of range.
+#[must_use]
 pub fn get_milestone(env: &Env, index: u32) -> Option<MilestoneData> {
     let key = DataKey::MilestoneData(index);
     let value = env.storage().persistent().get(&key)?;
