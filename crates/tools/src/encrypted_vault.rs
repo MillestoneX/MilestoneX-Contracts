@@ -1,3 +1,8 @@
+//! Environment-based encrypted vault for secure key storage.
+//!
+//! Keys are encrypted with AES-256-GCM at rest and only decrypted when needed.
+//! Supports saving/loading vault files with restrictive Unix permissions (0600).
+
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::env;
