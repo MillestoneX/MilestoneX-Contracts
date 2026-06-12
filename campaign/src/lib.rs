@@ -642,6 +642,7 @@ fn panic_with_error(env: &Env, error: Error) -> ! {
 }
 
 /// Validates campaign status transitions; panics if invalid.
+#[must_use]
 pub fn validate_campaign_transition(
     env: &Env,
     current_status: &CampaignStatus,
@@ -664,6 +665,7 @@ pub fn validate_campaign_transition(
 }
 
 /// Validates milestone status transitions; panics if invalid.
+#[must_use]
 pub fn validate_milestone_transition(
     env: &Env,
     current_status: &MilestoneStatus,
