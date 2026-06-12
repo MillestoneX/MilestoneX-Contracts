@@ -1,4 +1,6 @@
-#![no_std]
+//! OrbitChain core smart contract — campaign lifecycle, donations,
+//! withdrawals, analytics, and dashboard reporting.
+
 #![no_std]
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, vec, Address, Env, String, Symbol, Vec,
