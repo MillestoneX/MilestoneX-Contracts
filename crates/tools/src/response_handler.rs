@@ -1,3 +1,8 @@
+//! Signed transaction response handler.
+//!
+//! Parses wallet signing responses, validates signed transactions,
+//! and persists/loads them from JSON files for later submission.
+
 use anyhow::{Result, Context, anyhow};
 use serde::{Serialize, Deserialize};
 use serde_json::json;
