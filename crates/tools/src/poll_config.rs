@@ -24,6 +24,7 @@ impl Default for PollConfig {
 
 impl PollConfig {
     /// Returns a config suited for high-throughput environments (shorter interval).
+    #[must_use]
     pub fn high_frequency() -> Self {
         let interval = Duration::from_secs(5);
         Self {
@@ -34,6 +35,7 @@ impl PollConfig {
     }
 
     /// Returns a config suited for low-traffic / cost-sensitive deployments.
+    #[must_use]
     pub fn low_frequency() -> Self {
         let interval = Duration::from_secs(30);
         Self {
