@@ -372,7 +372,8 @@ pub struct VerifiableCertificate {
 }
 
 impl VerifiableCertificate {
-    /// Create a new verifiable certificate
+    /// Create a new verifiable certificate.
+    #[must_use]
     pub fn new(certificate_id: String, transaction_hash: String) -> Self {
         Self {
             certificate_id,
@@ -394,7 +395,8 @@ impl VerifiableCertificate {
         Ok(self.verification.as_ref().unwrap())
     }
 
-    /// Check if certificate is verified
+    /// Check if certificate is verified.
+    #[must_use]
     pub fn is_verified(&self) -> bool {
         self.verification.as_ref().map_or(false, |v| v.verified)
     }
