@@ -37,7 +37,8 @@ impl std::fmt::Display for TransactionStatus {
     }
 }
 
-/// Handler for processing and validating signed transactions
+/// Handler for processing and validating signed transactions.
+/// All methods are static — no instantiation required.
 pub struct ResponseHandler;
 
 impl ResponseHandler {
@@ -68,7 +69,8 @@ impl ResponseHandler {
         })
     }
 
-    /// Validate a signed transaction
+    /// Validate a signed transaction.
+    #[must_use]
     pub fn validate(tx: &SignedTransaction) -> Result<()> {
         if tx.request_id.is_empty() {
             return Err(anyhow!("Request ID cannot be empty"));
@@ -85,7 +87,8 @@ impl ResponseHandler {
         Ok(())
     }
 
-    /// Save signed transaction to file
+    /// Save signed transaction to file.
+    #[must_use]
     pub fn save_to_file(tx: &SignedTransaction, path: &str) -> Result<()> {
         let json = serde_json::to_string_pretty(tx)
             .context("Failed to serialize transaction")?;
@@ -96,7 +99,8 @@ impl ResponseHandler {
         Ok(())
     }
 
-    /// Load signed transaction from file
+    /// Load signed transaction from file.
+    #[must_use]
     pub fn load_from_file(path: &str) -> Result<SignedTransaction> {
         let content = fs::read_to_string(path)
             .context(format!("Failed to read transaction from {}", path))?;
