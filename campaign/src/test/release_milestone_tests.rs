@@ -1,3 +1,8 @@
+//! Tests for the `release_milestone` function.
+//!
+//! Covers valid releases, non-creator auth failures, locked/skipped/double
+//! release panics, frozen contract rejection, and sequential multi-milestone flows.
+
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, MockToken};
