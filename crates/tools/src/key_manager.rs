@@ -46,8 +46,9 @@ impl Drop for KeyManager {
 }
 
 impl KeyManager {
-    /// Initialize KeyManager from a master password/key
-    /// Derives a 256-bit key using SHA-256
+    /// Initialize KeyManager from a master password/key.
+    /// Derives a 256-bit key using SHA-256.
+    #[must_use]
     pub fn from_password(password: &str) -> Result<Self> {
         let mut hasher = Sha256::new();
         hasher.update(password.as_bytes());
@@ -59,7 +60,8 @@ impl KeyManager {
         Ok(Self { master_key })
     }
 
-    /// Initialize KeyManager from a 32-byte hex string
+    /// Initialize KeyManager from a 32-byte hex string.
+    #[must_use]
     pub fn from_hex_key(hex_key: &str) -> Result<Self> {
         let key_bytes = hex::decode(hex_key).context("Failed to decode hex key")?;
         if key_bytes.len() != 32 {
@@ -136,7 +138,8 @@ impl KeyManager {
         Ok(EncryptedKey { nonce, ciphertext })
     }
 
-    /// Validate a secret key format (basic Stellar check)
+    /// Validate a secret key format (basic Stellar check).
+    /// Must start with 'S' and be at least 56 characters.
     pub fn validate_secret_key(secret_key: &str) -> Result<()> {
         if !secret_key.starts_with('S') {
             anyhow::bail!("Secret key must start with 'S' (Stellar format)");
@@ -147,7 +150,8 @@ impl KeyManager {
         Ok(())
     }
 
-    /// Validate a public key format (basic Stellar check)
+    /// Validate a public key format (basic Stellar check).
+    /// Must start with 'G' and be at least 56 characters.
     pub fn validate_public_key(public_key: &str) -> Result<()> {
         if !public_key.starts_with('G') {
             anyhow::bail!("Public key must start with 'G' (Stellar format)");
