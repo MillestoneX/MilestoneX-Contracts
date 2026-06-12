@@ -13,7 +13,7 @@ use crate::CampaignContract;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Builds a minimal valid campaign setup.
+/// Builds a minimal valid campaign setup and returns (creator, assets, milestones).
 fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<MilestoneData>) {
     let creator = Address::generate(env);
     
