@@ -61,6 +61,7 @@ impl WorkerLogger {
     }
 
     /// Records and prints `message` at the given `level`.
+    #[inline]
     pub fn log(&mut self, level: LogLevel, message: impl Into<String>) {
         if self.min_level.map_or(true, |min| level >= min) {
             let entry = LogEntry { level, message: message.into() };
