@@ -19,6 +19,7 @@ pub struct EncryptedVault {
 
 impl EncryptedVault {
     /// Create a new empty vault
+    #[must_use]
     pub fn new() -> Self {
         Self {
             key_manager: None,
@@ -28,6 +29,7 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a master password
+    #[must_use]
     pub fn with_password(password: &str) -> Result<Self> {
         let key_manager = KeyManager::from_password(password)?;
         Ok(Self {
@@ -38,6 +40,7 @@ impl EncryptedVault {
     }
 
     /// Initialize vault with a hex-encoded master key
+    #[must_use]
     pub fn with_hex_key(hex_key: &str) -> Result<Self> {
         let key_manager = KeyManager::from_hex_key(hex_key)?;
         Ok(Self {
@@ -48,6 +51,7 @@ impl EncryptedVault {
     }
 
     /// Load vault configuration from .env file
+    #[must_use]
     pub fn from_env() -> Result<Self> {
         dotenv::dotenv().ok();
 
