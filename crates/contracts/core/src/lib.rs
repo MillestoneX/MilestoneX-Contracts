@@ -336,11 +336,13 @@ impl OrbitChainContract {
     }
 
     /// Get campaign details
+    #[must_use]
     pub fn get_campaign(env: Env, campaign_id: u64) -> Option<Campaign> {
         env.storage().persistent().get(&campaign_key(campaign_id))
     }
 
     /// Issue #102 – get total raised for a specific asset on a campaign
+    #[must_use]
     pub fn get_asset_raised(env: Env, campaign_id: u64, asset: Symbol) -> i128 {
         env.storage()
             .persistent()
@@ -349,11 +351,13 @@ impl OrbitChainContract {
     }
 
     /// Issue #103 – expose the fee constant
+    #[must_use]
     pub fn get_base_fee() -> i128 {
         BASE_FEE
     }
 
     /// Issue #104 – paginated donation history for a campaign.
+    #[must_use]
     pub fn get_donation_history(
         env: Env,
         campaign_id: u64,

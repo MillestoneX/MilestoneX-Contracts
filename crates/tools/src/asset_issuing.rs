@@ -1,3 +1,8 @@
+//! Stellar asset issuing and trustline management.
+//!
+//! Handles asset configuration from environment, trustline establishment,
+//! asset issuance to recipients, and issuing readiness validation.
+
 use anyhow::{Context, Result};
 use std::env;
 
