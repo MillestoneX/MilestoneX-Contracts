@@ -10,12 +10,14 @@ pub struct CampaignTotals {
 }
 
 impl CampaignTotals {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Adds `amount` to the running total for `campaign_id` + `asset` and returns the new total.
     #[must_use]
+    #[inline]
     pub fn increment(&mut self, campaign_id: u64, asset: &str, amount: i128) -> i128 {
         let entry = self.asset_totals.entry((campaign_id, asset.to_string())).or_insert(0);
         *entry += amount;
