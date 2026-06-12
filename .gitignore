@@ -29,4 +29,11 @@ soroban.toml
 
 # Deployment records (contain network-specific contract IDs; committed per-env as needed)
 deployments/*.json
-.stellaraid_contract_id
+.orbitchain_contract_id
+
+# Test artifacts
+/signing_requests
+/signed_transactions
+/tmp
+*.log
+*.enc
