@@ -1,3 +1,7 @@
+//! Tests for `CampaignContract::get_campaign_status`.
+//!
+//! Covers all four campaign statuses and the `days_remaining` calculation.
+
 #![cfg(test)]
 
 use soroban_sdk::testutils::Address as AddressTestUtils;
