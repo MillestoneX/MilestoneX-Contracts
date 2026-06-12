@@ -1,3 +1,7 @@
+//! Campaign-payment memo matching utilities.
+//!
+//! Maps `campaign:<id>` memo text to campaign IDs and verifies matches.
+
 /// Extract the campaign ID from a Stellar payment memo.
 ///
 /// Convention: memo text is `"campaign:<id>"`, e.g. `"campaign:42"`.
