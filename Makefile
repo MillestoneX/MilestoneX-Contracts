@@ -1,5 +1,5 @@
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help \
-        setup deploy-testnet deploy-sandbox sandbox-start
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny
 
 # Default target
 build: build-wasm build-tools
@@ -71,6 +71,18 @@ deploy-testnet: build-wasm
 	@echo "🚀 Deploying to testnet..."
 	bash scripts/deploy.sh testnet
 
+
+# Run cargo-audit for vulnerability scanning
+audit:
+	@echo "🔒 Running security audit..."
+	cargo audit
+	@echo "✅ Security audit passed"
+
+# Run cargo-deny for license compliance
+deny:
+	@echo "📋 Checking license compliance..."
+	cargo deny check
+	@echo "✅ License check passed"
 
 # Optimize WASM binaries using wasm-opt (-Oz)
 optimize: build
