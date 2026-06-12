@@ -2,6 +2,7 @@
 name = "orbitchain-token-bridge"
 version = "0.1.0"
 edition = "2021"
+description = "OrbitChain cross-chain token bridge contract"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
