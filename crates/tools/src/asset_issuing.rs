@@ -44,7 +44,8 @@ impl AssetConfig {
         })
     }
 
-    /// Validate asset configuration
+    /// Validate asset configuration.
+    #[must_use]
     pub fn validate(&self) -> Result<()> {
         if self.code.is_empty() || self.code.len() > 12 {
             anyhow::bail!("Asset code must be 1-12 characters");
