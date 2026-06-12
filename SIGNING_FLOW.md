@@ -1,4 +1,6 @@
-# Signing Request Flow - Step-by-Step Implementation Guide
+# Signing Request Flow — Step-by-Step Implementation Guide
+
+> **Version:** 1.0 | **Last Updated:** June 2026
 
 ## Overview
 
