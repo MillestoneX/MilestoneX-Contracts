@@ -1,6 +1,6 @@
 # 🌟 OrbitChain
 
-[![CI](https://github.com/YOUR_USERNAME/orbitchain-contract/workflows/CI/badge.svg)](https://github.com/YOUR_USERNAME/orbitchain-contract/actions)
+[![CI](https://github.com/orbitchain/orbitchain-contracts/workflows/CI/badge.svg)](https://github.com/orbitchain/orbitchain-contracts/actions)
 
 A blockchain-based crowdfunding platform built on the **Stellar Network** for transparent, borderless, and secure fundraising.
 
