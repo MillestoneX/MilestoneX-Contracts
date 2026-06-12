@@ -14,6 +14,7 @@ pub struct MasterKeypair {
 
 impl MasterKeypair {
     /// Generate a new master keypair
+    #[must_use]
     pub fn generate(network: &str) -> Result<Self> {
         // In production, this would use Stellar SDK to generate keypair
         // For now, validate that the network is valid
@@ -28,7 +29,7 @@ impl MasterKeypair {
         })
     }
 
-    /// Validate keypair format
+    /// Validate keypair format (public key starts with G, secret key starts with S).
     pub fn validate(&self) -> Result<()> {
         KeyManager::validate_public_key(&self.public_key)?;
         KeyManager::validate_secret_key(&self.secret_key)?;
