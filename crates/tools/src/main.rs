@@ -102,7 +102,7 @@ fn handle_config() -> Result<()> {
         _ => println!("Unknown network: {}", config.network),
     }
 
-    if let Some(admin_key) = config.admin_public_key {
+    if let Some(ref admin_key) = config.admin_public_key {
         println!("Admin Public Key: {}", admin_key);
     } else {
         println!("⚠️  Admin public key not set");

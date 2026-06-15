@@ -32,6 +32,7 @@ mod tests {
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
     use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
+    use crate::test::with_contract;
 
     fn make_env() -> Env {
         Env::default()
@@ -81,42 +82,47 @@ mod tests {
     #[test]
     fn returns_all_milestones_when_empty() {
         let env = make_env();
-        seed_campaign(&env, 0);
-
-        let result = get_all_milestones_view(&env);
-        assert_eq!(result.len(), 0);
+        with_contract(&env, || {
+            seed_campaign(&env, 0);
+            let result = get_all_milestones_view(&env);
+            assert_eq!(result.len(), 0);
+        });
     }
 
     #[test]
     fn returns_all_milestones_for_single() {
         let env = make_env();
-        seed_campaign(&env, 1);
-        seed_milestone(&env, 0, MilestoneStatus::Locked);
-
-        let result = get_all_milestones_view(&env);
-        assert_eq!(result.len(), 1);
-        assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Locked);
+        with_contract(&env, || {
+            seed_campaign(&env, 1);
+            seed_milestone(&env, 0, MilestoneStatus::Locked);
+            let result = get_all_milestones_view(&env);
+            assert_eq!(result.len(), 1);
+            assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Locked);
+        });
     }
 
     #[test]
     fn returns_all_milestones_for_multiple() {
         let env = make_env();
-        seed_campaign(&env, 3);
-        seed_milestone(&env, 0, MilestoneStatus::Released);
-        seed_milestone(&env, 1, MilestoneStatus::Unlocked);
-        seed_milestone(&env, 2, MilestoneStatus::Locked);
-
-        let result = get_all_milestones_view(&env);
-        assert_eq!(result.len(), 3);
-        assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Released);
-        assert_eq!(result.get(1).unwrap().data.status, MilestoneStatus::Unlocked);
-        assert_eq!(result.get(2).unwrap().data.status, MilestoneStatus::Locked);
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            seed_milestone(&env, 0, MilestoneStatus::Released);
+            seed_milestone(&env, 1, MilestoneStatus::Unlocked);
+            seed_milestone(&env, 2, MilestoneStatus::Locked);
+            let result = get_all_milestones_view(&env);
+            assert_eq!(result.len(), 3);
+            assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Released);
+            assert_eq!(result.get(1).unwrap().data.status, MilestoneStatus::Unlocked);
+            assert_eq!(result.get(2).unwrap().data.status, MilestoneStatus::Locked);
+        });
     }
 
     #[test]
     #[should_panic]
     fn panics_when_not_initialised() {
         let env = make_env();
-        get_all_milestones_view(&env);
+        with_contract(&env, || {
+            get_all_milestones_view(&env);
+        });
     }
 }

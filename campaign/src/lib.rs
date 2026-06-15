@@ -17,7 +17,7 @@ pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
 use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, get_total_raised as storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen};
+use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
 
 pub const VERSION: u32 = 1;
 
@@ -464,6 +464,11 @@ impl CampaignContract {
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone(env: Env, milestone_index: u32, recipient: Address) {
+        // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
+        // can intercept require_auth() within the contract invocation frame.
+        let campaign = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        campaign.creator.require_auth();
         release_milestone::release_milestone(&env, milestone_index, recipient);
     }
 
@@ -473,6 +478,11 @@ impl CampaignContract {
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone_multi_asset(env: Env, milestone_index: u32, recipient: Address) {
+        // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
+        // can intercept require_auth() within the contract invocation frame.
+        let campaign = get_campaign(&env)
+            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        campaign.creator.require_auth();
         multi_asset_release::release_milestone_multi_asset(&env, milestone_index, recipient);
     }
 
@@ -700,4 +710,15 @@ mod test {
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
+
+    /// Shared helper: register the contract and run the body inside
+    /// `env.as_contract()` so storage, ledger, and auth work correctly.
+    /// Call `env.mock_all_auths()` BEFORE this if auth is needed.
+    pub(crate) fn with_contract<F, R>(env: &soroban_sdk::Env, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let contract_id = env.register_contract(None, crate::CampaignContract);
+        env.as_contract(&contract_id, f)
+    }
 }

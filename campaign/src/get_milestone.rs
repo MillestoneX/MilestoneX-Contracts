@@ -59,6 +59,7 @@ mod tests {
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
     use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
+    use crate::test::with_contract;
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -115,50 +116,57 @@ mod tests {
     #[test]
     fn returns_raw_data_for_index_zero() {
         let env = make_env();
-        seed_campaign(&env, 1);
-        let stored = seed_milestone(&env, 0, MilestoneStatus::Locked);
-        assert_eq!(get_milestone_view(&env, 0), stored);
+        with_contract(&env, || {
+            seed_campaign(&env, 1);
+            let stored = seed_milestone(&env, 0, MilestoneStatus::Locked);
+            assert_eq!(get_milestone_view(&env, 0), stored);
+        });
     }
 
     #[test]
     fn returns_correct_milestone_for_non_zero_index() {
         let env = make_env();
-        seed_campaign(&env, 3);
-        seed_milestone(&env, 0, MilestoneStatus::Released);
-        seed_milestone(&env, 1, MilestoneStatus::Unlocked);
-        let stored = seed_milestone(&env, 2, MilestoneStatus::Locked);
-
-        let result = get_milestone_view(&env, 2);
-        assert_eq!(result.index, 2);
-        assert_eq!(result.target_amount, stored.target_amount);
-        assert_eq!(result.status, MilestoneStatus::Locked);
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            seed_milestone(&env, 0, MilestoneStatus::Released);
+            seed_milestone(&env, 1, MilestoneStatus::Unlocked);
+            let stored = seed_milestone(&env, 2, MilestoneStatus::Locked);
+            let result = get_milestone_view(&env, 2);
+            assert_eq!(result.index, 2);
+            assert_eq!(result.target_amount, stored.target_amount);
+            assert_eq!(result.status, MilestoneStatus::Locked);
+        });
     }
 
     #[test]
     #[should_panic]
     fn panics_on_index_equal_to_milestone_count() {
-        // Off-by-one boundary: count == 1, valid indices are [0], so 1 is OOB
         let env = make_env();
-        seed_campaign(&env, 1);
-        seed_milestone(&env, 0, MilestoneStatus::Locked);
-        get_milestone_view(&env, 1);
+        with_contract(&env, || {
+            seed_campaign(&env, 1);
+            seed_milestone(&env, 0, MilestoneStatus::Locked);
+            get_milestone_view(&env, 1);
+        });
     }
 
     #[test]
     #[should_panic]
     fn panics_on_index_far_exceeding_milestone_count() {
         let env = make_env();
-        seed_campaign(&env, 1);
-        seed_milestone(&env, 0, MilestoneStatus::Locked);
-        get_milestone_view(&env, 99);
+        with_contract(&env, || {
+            seed_campaign(&env, 1);
+            seed_milestone(&env, 0, MilestoneStatus::Locked);
+            get_milestone_view(&env, 99);
+        });
     }
 
     #[test]
     #[should_panic]
     fn panics_when_contract_not_initialised() {
-        // No campaign seeded → get_campaign_or_panic fires NotInitialized
         let env = make_env();
-        get_milestone_view(&env, 0);
+        with_contract(&env, || {
+            get_milestone_view(&env, 0);
+        });
     }
 
     // ── get_milestone_view_enriched ──────────────────────────────────────────
@@ -166,40 +174,40 @@ mod tests {
     #[test]
     fn enriched_carries_pending_release_and_is_next_pending() {
         let env = make_env();
-        seed_campaign(&env, 2);
-        seed_milestone(&env, 0, MilestoneStatus::Released);
-        let stored = seed_milestone(&env, 1, MilestoneStatus::Unlocked);
-
-        let view = get_milestone_view_enriched(&env, 1);
-
-        assert_eq!(view.data, stored);
-        assert_eq!(view.pending_release, stored.target_amount);
-        assert!(!view.is_fully_released);
-        assert!(view.is_next_pending);
+        with_contract(&env, || {
+            seed_campaign(&env, 2);
+            seed_milestone(&env, 0, MilestoneStatus::Released);
+            let stored = seed_milestone(&env, 1, MilestoneStatus::Unlocked);
+            let view = get_milestone_view_enriched(&env, 1);
+            assert_eq!(view.data, stored);
+            assert_eq!(view.pending_release, stored.target_amount);
+            assert!(!view.is_fully_released);
+            assert!(view.is_next_pending);
+        });
     }
 
     #[test]
     fn enriched_is_fully_released_when_milestone_is_released() {
         let env = make_env();
-        seed_campaign(&env, 1);
-        seed_milestone(&env, 0, MilestoneStatus::Released);
-
-        let view = get_milestone_view_enriched(&env, 0);
-
-        assert!(view.is_fully_released);
-        assert_eq!(view.pending_release, 0);
-        assert!(!view.is_next_pending);
+        with_contract(&env, || {
+            seed_campaign(&env, 1);
+            seed_milestone(&env, 0, MilestoneStatus::Released);
+            let view = get_milestone_view_enriched(&env, 0);
+            assert!(view.is_fully_released);
+            assert_eq!(view.pending_release, 0);
+            assert!(!view.is_next_pending);
+        });
     }
 
     #[test]
     fn enriched_locked_milestone_is_not_marked_next_pending() {
         let env = make_env();
-        seed_campaign(&env, 2);
-        // index 0 is Unlocked → it is next pending; index 1 (Locked) is not
-        seed_milestone(&env, 0, MilestoneStatus::Unlocked);
-        seed_milestone(&env, 1, MilestoneStatus::Locked);
-
-        let view = get_milestone_view_enriched(&env, 1);
-        assert!(!view.is_next_pending);
+        with_contract(&env, || {
+            seed_campaign(&env, 2);
+            seed_milestone(&env, 0, MilestoneStatus::Unlocked);
+            seed_milestone(&env, 1, MilestoneStatus::Locked);
+            let view = get_milestone_view_enriched(&env, 1);
+            assert!(!view.is_next_pending);
+        });
     }
 }

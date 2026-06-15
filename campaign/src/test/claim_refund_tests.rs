@@ -5,12 +5,17 @@
 
 #![cfg(test)]
 
-use soroban_sdk::testutils::Address as AddressTestUtils;
+use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::{Address, Env};
 
 use crate::types::{CampaignStatus, CampaignData, DonorRecord, AssetInfo, StellarAsset, MilestoneStatus};
 use crate::storage::{set_campaign, set_donor, set_milestone};
 use crate::CampaignContract;
+use super::with_contract;
+
+/// Base ledger timestamp (1 year in seconds) used so we can safely subtract
+/// from it to simulate "past" end_times without underflow.
+const BASE: u64 = 86400 * 365;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -98,10 +103,11 @@ fn create_test_donor(
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_not_initialized() {
     let env = make_env();
-    let donor = Address::generate(&env);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let donor = Address::generate(&env);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// A donor who has never donated should not be able to claim a refund.
@@ -109,13 +115,14 @@ fn test_claim_refund_not_initialized() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_no_donor_record() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() + 1000;
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// Refunds should not be allowed while the campaign is Active.
@@ -123,14 +130,15 @@ fn test_claim_refund_no_donor_record() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_active_campaign() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() + 1000;
-    create_test_campaign(&env, CampaignStatus::Active, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::Active, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// Refunds should not be allowed while the campaign is in GoalReached status.
@@ -138,14 +146,15 @@ fn test_claim_refund_active_campaign() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_goal_reached_campaign() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() + 1000;
-    create_test_campaign(&env, CampaignStatus::GoalReached, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::GoalReached, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// Refunds should not be allowed on an Ended campaign when a milestone has already been released.
@@ -153,15 +162,16 @@ fn test_claim_refund_goal_reached_campaign() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_ended_with_milestone_released() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() - 100; // Campaign has ended
-    create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - 100;
+        create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// Refunds should not be allowed if the 30-day refund window has closed.
@@ -169,15 +179,15 @@ fn test_claim_refund_ended_with_milestone_released() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_window_closed() {
     let env = make_env();
-    // Campaign ended more than 30 days ago
-    let end_time = env.ledger().timestamp() - (31 * 24 * 60 * 60);
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - (31 * 24 * 60 * 60);
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// A donor who has already claimed a refund should not be able to claim again.
@@ -185,86 +195,89 @@ fn test_claim_refund_window_closed() {
 #[should_panic(expected = "HostError")]
 fn test_claim_refund_already_claimed() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() + 1000;
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, true); // Already claimed
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    CampaignContract::claim_refund(env.clone(), donor.clone());
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, true);
+        CampaignContract::claim_refund(env.clone(), donor.clone());
+    });
 }
 
 /// Exactly at the 30-day window boundary should still allow refunds.
 #[test]
 fn test_claim_refund_exactly_at_window_boundary() {
     let env = make_env();
-    // Campaign ended exactly 30 days ago
-    let end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60);
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
-
-    let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-    assert!(eligible, "Should be refund-eligible at exactly 30-day boundary");
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60);
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
+        assert!(eligible, "Should be refund-eligible at exactly 30-day boundary");
+    });
 }
 
 /// One second past the 30-day window should deny refunds.
 #[test]
 fn test_claim_refund_one_second_past_window() {
     let env = make_env();
-    // Campaign ended 30 days + 1 second ago
-    let end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60 + 1);
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
-
-    let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-    assert!(!eligible, "Should NOT be refund-eligible past 30-day window");
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60 + 1);
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
+        assert!(!eligible, "Should NOT be refund-eligible past 30-day window");
+    });
 }
 
 /// A donor with zero donation should not be eligible for refund (no donor record = not a donor).
 #[test]
 fn test_claim_refund_no_donor_eligibility() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() + 1000;
-    create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
-
-    let non_donor = Address::generate(&env);
-    // No donor record created
-
-    let eligible = CampaignContract::is_refund_eligible(env.clone(), non_donor.clone());
-    assert!(!eligible, "Non-donor should not be refund-eligible");
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() + 1000;
+        create_test_campaign(&env, CampaignStatus::Cancelled, 1000, end_time, 1);
+        let non_donor = Address::generate(&env);
+        let eligible = CampaignContract::is_refund_eligible(env.clone(), non_donor.clone());
+        assert!(!eligible, "Non-donor should not be refund-eligible");
+    });
 }
 
 /// On an Ended campaign with no milestones released, the refund should be eligible.
 #[test]
 fn test_claim_refund_ended_no_milestones_eligibility() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() - 100; // Campaign has ended
-    create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
-
-    let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-    assert!(eligible, "Ended campaign with no released milestones should allow refunds");
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - 100;
+        create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
+        assert!(eligible, "Ended campaign with no released milestones should allow refunds");
+    });
 }
 
 /// On an Ended campaign with a released milestone, refund should NOT be eligible.
 #[test]
 fn test_claim_refund_ended_with_released_milestone_eligibility() {
     let env = make_env();
-    let end_time = env.ledger().timestamp() - 100;
-    create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
-
-    let donor = Address::generate(&env);
-    create_test_donor(&env, &donor, 100, false);
-
-    let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-    assert!(!eligible, "Ended campaign with released milestones should NOT allow refunds");
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let end_time = env.ledger().timestamp() - 100;
+        create_test_campaign(&env, CampaignStatus::Ended, 1000, end_time, 1);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
+        assert!(!eligible, "Ended campaign with released milestones should NOT allow refunds");
+    });
 }
