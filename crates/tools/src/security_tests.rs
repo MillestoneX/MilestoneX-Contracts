@@ -4,7 +4,7 @@
 //! input validation, and data sanitization. All methods are static — instantiate
 //! with `SecurityTestSuite` to run.
 
-use anyhow::{Result, Context};
+use anyhow::Result;
 use std::collections::HashMap;
 
 /// Security test suite for comprehensive vulnerability testing.
@@ -446,7 +446,7 @@ impl SecurityTestSuite {
     }
 
     /// Check user access to resource
-    fn check_user_access(user: &str, resource: &str) -> bool {
+    fn check_user_access(_user: &str, _resource: &str) -> bool {
         // In production, verify access control
         // Return false to indicate secure implementation
         false
@@ -482,15 +482,15 @@ impl SecurityTestSuite {
             // Buffer overflow attempts
             ("A".repeat(10000), "Buffer overflow attempt"),
             // Null bytes
-            ("test\x00value", "Null byte injection"),
+            ("test\x00value".to_string(), "Null byte injection"),
             // Path traversal
-            ("../../../etc/passwd", "Path traversal"),
+            ("../../../etc/passwd".to_string(), "Path traversal"),
             // Command injection
-            ("test; ls -la", "Command injection"),
+            ("test; ls -la".to_string(), "Command injection"),
             // Format string
-            ("%s%s%s%s", "Format string attack"),
+            ("%s%s%s%s".to_string(), "Format string attack"),
             // Unicode attacks
-            ("\u{0000}\u{FFFF}", "Unicode edge cases"),
+            ("\u{0000}\u{FFFF}".to_string(), "Unicode edge cases"),
         ];
 
         for (input, description) in &test_cases {
@@ -595,6 +595,14 @@ impl SecurityTestSuite {
     }
 }
 
+/// Result of testing a single payload
+#[derive(Debug, Clone)]
+pub struct PayloadTestResult {
+    pub vulnerable: bool,
+    pub severity: String,
+    pub description: String,
+}
+
 /// Test result structure
 #[derive(Debug, Clone)]
 pub struct TestResult {
@@ -626,9 +634,9 @@ impl TestReport {
         }
     }
 
-    fn add_result(&mut self, category: String, result: TestResult) {
+    fn add_result(&mut self, category: &str, result: TestResult) {
         self.total_vulnerabilities += result.vulnerabilities.len();
-        self.results.insert(category, result);
+        self.results.insert(category.to_string(), result);
     }
 
     fn display(&self) {

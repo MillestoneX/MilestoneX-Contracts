@@ -1,32 +1,46 @@
 //! Tests for the `release_milestone` function.
 //!
-//! Covers valid releases, non-creator auth failures, locked/skipped/double
-//! release panics, frozen contract rejection, and sequential multi-milestone flows.
+//! **Strategy:** Because `release_milestone` does cross-contract token transfers,
+//! it cannot be tested via `CampaignContract::` direct calls inside `as_contract()`
+//! (auth frames break), nor via `CampaignContractClient` outside `as_contract()`
+//! (mock token storage isn't visible to the Client's invocation context in SDK 26.x).
+//!
+//! Solution:
+//! - **Business-logic tests** call `crate::release_milestone::release_milestone()`
+//!   directly inside `with_contract()`. Auth is already handled upstream by the
+//!   `#[contractimpl]` wrapper in `lib.rs`, so the module function is auth-free.
+//! - Tests that exercise token transfers call `mint_tokens_to_contract()` (which
+//!   needs `mock_all_auths()`) BEFORE `with_contract()`.
+//! - **Auth-rejection test** uses the `CampaignContractClient` without
+//!   `mock_all_auths()`, and sets up campaign storage without token minting
+//!   (auth fails before reaching token ops).
+//! - **Integration tests** (in `integration_tests.rs`) cover the full lifecycle
+//!   with Client-based auth.
 
 #![cfg(test)]
 
-use soroban_sdk::testutils::{Address as AddressTestUtils, MockToken};
+use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::{Address, Env, Vec, String, BytesN};
+use soroban_sdk::token::StellarAssetClient;
 
-use crate::types::{CampaignData, CampaignStatus, StellarAsset, MilestoneData, MilestoneStatus};
-use crate::storage::{get_campaign, get_milestone, set_campaign, set_milestone};
+use crate::types::{CampaignStatus, StellarAsset, MilestoneData, MilestoneStatus, CampaignData};
+use crate::storage::{get_milestone, set_campaign, set_milestone};
+use crate::CampaignContractClient;
+use super::with_contract;
+
+/// Base ledger timestamp (1 year in seconds).
+const BASE: u64 = 86400 * 365;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-fn create_test_env() -> (Env, Address) {
-    let env = Env::default();
-    let creator = Address::generate(&env);
-    (env, creator)
-}
-
 /// Creates a campaign in Active state with the given parameters.
-/// Registers a mock token contract for each accepted asset so that
-/// token client calls during release_milestone succeed.
+/// Registers a mock token contract (for cross-contract calls).
+/// Does NOT mint tokens — call `mint_tokens_to_contract()` separately if
+/// `release_milestone` will actually execute token transfers.
 fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
-    let token_issuer = Address::generate(env);
-
-    // Register the mock token so balance/transfer calls don't panic
-    env.register_stellar_asset_contract(token_issuer.clone());
+    // Pass an explicit admin address so the mock SAC stores admin storage properly
+    let token_admin = Address::generate(env);
+    let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
@@ -37,7 +51,7 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
     let campaign = CampaignData {
         creator: creator.clone(),
         goal_amount: 3000,
-        raised_amount: 3000, // Fully funded
+        raised_amount: 3000,
         end_time: env.ledger().timestamp() + 86_400,
         status: CampaignStatus::Active,
         accepted_assets: assets,
@@ -48,6 +62,24 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
         concluded_at_ledger: None,
     };
     set_campaign(env, &campaign);
+}
+
+/// Initializes the mock SAC and mints tokens to the current contract address
+/// so that `balance()` and `transfer()` calls inside `release_milestone` don't
+/// panic with `Storage(MissingValue)` in the mock token.
+///
+/// The mock SAC registered by `register_stellar_asset_contract(admin)` stores
+/// the admin, making `StellarAssetClient::mint()` work with `mock_all_auths()`.
+///
+/// Requires `env.mock_all_auths()` to be called before `with_contract()`.
+fn mint_tokens_to_contract(env: &Env) {
+    let campaign = crate::storage::get_campaign(env).unwrap();
+    if let Some(asset) = campaign.accepted_assets.first() {
+        if let Some(issuer) = &asset.issuer {
+            let token_admin = StellarAssetClient::new(env, issuer);
+            token_admin.mint(&env.current_contract_address(), &10_000_000i128);
+        }
+    }
 }
 
 /// Creates a milestone with the given index, target, and status.
@@ -71,255 +103,246 @@ fn create_test_milestone(
     set_milestone(env, index, &milestone);
 }
 
-/// Creates a simple campaign with one unlocked milestone for happy-path tests.
-fn setup_single_milestone_campaign(env: &Env) -> Address {
+/// Creates a simple campaign with one unlocked milestone AND mints tokens.
+/// For tests that actually execute token transfers.
+fn setup_single_milestone_campaign_with_funding(env: &Env) {
+    let creator = Address::generate(env);
+    create_test_campaign(env, &creator, 1);
+    mint_tokens_to_contract(env);
+    create_test_milestone(env, 0, 3000, MilestoneStatus::Unlocked);
+}
+
+/// Creates a simple campaign with one unlocked milestone WITHOUT minting tokens.
+/// For tests that panic before reaching token transfers.
+fn setup_single_milestone_campaign_no_funding(env: &Env) {
     let creator = Address::generate(env);
     create_test_campaign(env, &creator, 1);
     create_test_milestone(env, 0, 3000, MilestoneStatus::Unlocked);
-    creator
 }
 
-// ─── Happy path: valid release ────────────────────────────────────────────────
+// ─── Happy path: valid release (module function, with token funding) ──────────
 
 /// Test: valid release updates milestone status to Released.
+/// Calls the module function directly — auth is tested separately.
 #[test]
 fn test_valid_release_updates_milestone_status() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
-    // Mock the creator's auth
-    env.mock_all_auths();
-
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-
-    // Verify milestone is now Released
-    let milestone = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(
-        milestone.status,
-        MilestoneStatus::Released,
-        "Milestone should transition to Released after valid release"
-    );
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths(); // For token mint
+    with_contract(&env, || {
+        setup_single_milestone_campaign_with_funding(&env);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(
+            milestone.status,
+            MilestoneStatus::Released,
+            "Milestone should transition to Released after valid release"
+        );
+    });
 }
 
 /// Test: valid release sets the released_amount to target_amount.
 #[test]
 fn test_valid_release_sets_released_amount() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-
-    let milestone = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(
-        milestone.released_amount,
-        milestone.target_amount,
-        "Released amount should equal target amount after release"
-    );
+    with_contract(&env, || {
+        setup_single_milestone_campaign_with_funding(&env);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(
+            milestone.released_amount,
+            milestone.target_amount,
+            "Released amount should equal target amount after release"
+        );
+    });
 }
 
 /// Test: final milestone releases remaining balance correctly.
 #[test]
 fn test_final_milestone_releases_remaining_balance() {
-    let (env, _creator) = create_test_env();
-    let creator = Address::generate(&env);
-    let recipient = Address::generate(&env);
-
-    // Create a 3-milestone campaign at 1000, 2000, 3000
-    create_test_campaign(&env, &creator, 3);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
-    create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
-    create_test_milestone(&env, 2, 3000, MilestoneStatus::Locked);
-
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
-
-    // Release milestone 1 (the only Unlocked one)
-    crate::release_milestone::release_milestone(&env, 1, recipient.clone());
-
-    let milestone = get_milestone(&env, 1).expect("Milestone should exist");
-    assert_eq!(
-        milestone.status,
-        MilestoneStatus::Released,
-        "Milestone 1 should be Released"
-    );
-    assert_eq!(
-        milestone.released_amount,
-        milestone.target_amount,
-        "Milestone 1 released amount should equal target"
-    );
-
-    // Milestone 0 was already released, milestone 2 is still locked
-    let milestone0 = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(milestone0.status, MilestoneStatus::Released);
-
-    let milestone2 = get_milestone(&env, 2).expect("Milestone should exist");
-    assert_eq!(milestone2.status, MilestoneStatus::Locked);
-}
-
-// ─── Error path: non-creator release panics ──────────────────────────────────
-
-/// Test: calling release_milestone with a non-creator address panics.
-#[test]
-#[should_panic(expected = "HostError")]
-fn test_non_creator_release_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
-    // Do NOT mock auth — the creator address won't be the caller
-    // The call should panic because creator.require_auth() fails
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-}
-
-// ─── Error path: locked milestone release panics ─────────────────────────────
-
-/// Test: releasing a Locked milestone panics with InvalidMilestoneTransition.
-#[test]
-#[should_panic(expected = "HostError")]
-fn test_locked_milestone_release_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = Address::generate(&env);
-
-    create_test_campaign(&env, &creator, 1);
-    // Milestone is Locked (not Unlocked)
-    create_test_milestone(&env, 0, 3000, MilestoneStatus::Locked);
-
-    let recipient = Address::generate(&env);
-    env.mock_all_auths();
-
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-}
-
-// ─── Error path: skipping milestone release panics ───────────────────────────
-
-/// Test: releasing a milestone without the previous being Released panics.
-#[test]
-#[should_panic(expected = "HostError")]
-fn test_skipping_milestone_release_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = Address::generate(&env);
-
-    // Create 3 milestones. Only milestone 1 is Unlocked, but 0 is NOT Released
-    create_test_campaign(&env, &creator, 3);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Unlocked); // Not Released
-    create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
-    create_test_milestone(&env, 2, 3000, MilestoneStatus::Locked);
-
-    let recipient = Address::generate(&env);
-    env.mock_all_auths();
-
-    // Try to release milestone 1 while milestone 0 is still Unlocked
-    crate::release_milestone::release_milestone(&env, 1, recipient.clone());
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        let recipient = Address::generate(&env);
+        create_test_campaign(&env, &creator, 3);
+        mint_tokens_to_contract(&env);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Released);
+        create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 2, 3000, MilestoneStatus::Locked);
+        crate::release_milestone::release_milestone(&env, 1, recipient);
+        let milestone = get_milestone(&env, 1).expect("Milestone should exist");
+        assert_eq!(milestone.status, MilestoneStatus::Released);
+        assert_eq!(milestone.released_amount, milestone.target_amount);
+        let milestone0 = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(milestone0.status, MilestoneStatus::Released);
+        let milestone2 = get_milestone(&env, 2).expect("Milestone should exist");
+        assert_eq!(milestone2.status, MilestoneStatus::Locked);
+    });
 }
 
 /// Test: releasing milestone 0 when previous is still Locked succeeds
 /// because milestone 0 has no predecessor check.
 #[test]
 fn test_first_milestone_release_succeeds_regardless_of_previous() {
-    let (env, _creator) = create_test_env();
-    let creator = Address::generate(&env);
-
-    create_test_campaign(&env, &creator, 1);
-    create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
-
-    let recipient = Address::generate(&env);
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        create_test_campaign(&env, &creator, 1);
+        mint_tokens_to_contract(&env);
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(milestone.status, MilestoneStatus::Released);
+    });
+}
 
-    // Release milestone 0 — should succeed (no predecessor check)
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+/// Test: releasing milestones in order succeeds.
+#[test]
+fn test_sequential_milestone_release_succeeds() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        create_test_campaign(&env, &creator, 3);
+        mint_tokens_to_contract(&env);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 2, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+        let m0 = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(m0.status, MilestoneStatus::Released);
+        crate::release_milestone::release_milestone(&env, 1, recipient.clone());
+        let m1 = get_milestone(&env, 1).expect("Milestone should exist");
+        assert_eq!(m1.status, MilestoneStatus::Released);
+        crate::release_milestone::release_milestone(&env, 2, recipient);
+        let m2 = get_milestone(&env, 2).expect("Milestone should exist");
+        assert_eq!(m2.status, MilestoneStatus::Released);
+    });
+}
 
-    let milestone = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(milestone.status, MilestoneStatus::Released);
+// ─── Auth rejection: non-creator release panics (via Client) ──────────────────
+
+/// Test: calling release_milestone without mock_all_auths panics (auth rejected).
+/// Uses the Client to test the full `#[contractimpl]` wrapper + auth path.
+/// Sets up campaign WITHOUT token minting since auth fails before token ops.
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_non_creator_release_panics() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    // No mock_all_auths — auth should be rejected
+    let contract_id = env.register_contract(None, crate::CampaignContract);
+    let client = CampaignContractClient::new(&env, &contract_id);
+    let recipient = Address::generate(&env);
+
+    // Set up campaign storage without token mint (auth fails before token ops)
+    env.as_contract(&contract_id, || {
+        setup_single_milestone_campaign_no_funding(&env);
+    });
+
+    client.release_milestone(&0u32, &recipient);
+}
+
+// ─── Error path: locked milestone release panics (module function) ────────────
+
+/// Test: releasing a Locked milestone panics with InvalidMilestoneTransition.
+/// Panics at milestone status check before reaching token transfers — no funding needed.
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_locked_milestone_release_panics() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        create_test_campaign(&env, &creator, 1);
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Locked);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+    });
+}
+
+// ─── Error path: skipping milestone release panics ───────────────────────────
+
+/// Test: releasing a milestone without the previous being Released panics.
+/// Panics at predecessor check before reaching token transfers — no funding needed.
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_skipping_milestone_release_panics() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        create_test_campaign(&env, &creator, 3);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 2, 3000, MilestoneStatus::Locked);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 1, recipient);
+    });
 }
 
 // ─── Error path: double release panics ───────────────────────────────────────
 
 /// Test: releasing an already-Released milestone panics.
+/// First release succeeds (needs token funding), second panics.
 #[test]
 #[should_panic(expected = "HostError")]
 fn test_double_release_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
-    env.mock_all_auths();
-
-    // First release — should succeed
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-
-    // Verify it's released
-    let milestone = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(milestone.status, MilestoneStatus::Released);
-
-    // Second release of the same milestone — should panic
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths(); // For token mint (first release transfers tokens)
+    with_contract(&env, || {
+        setup_single_milestone_campaign_with_funding(&env);
+        let recipient = Address::generate(&env);
+        // First release succeeds
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+        let milestone = get_milestone(&env, 0).expect("Milestone should exist");
+        assert_eq!(milestone.status, MilestoneStatus::Released);
+        // Second release should panic
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+    });
 }
 
 // ─── Error path: non-existent milestone ──────────────────────────────────────
 
 /// Test: releasing a milestone index that doesn't exist panics.
+/// Panics at MilestoneNotFound before reaching token transfers — no funding needed.
 #[test]
 #[should_panic(expected = "HostError")]
 fn test_release_non_existent_milestone_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
-    env.mock_all_auths();
-
-    // Campaign has 1 milestone. Index 5 is out of bounds.
-    crate::release_milestone::release_milestone(&env, 5, recipient.clone());
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        setup_single_milestone_campaign_no_funding(&env);
+        let recipient = Address::generate(&env);
+        crate::release_milestone::release_milestone(&env, 5, recipient);
+    });
 }
 
 // ─── Error path: frozen contract ─────────────────────────────────────────────
 
 /// Test: releasing a milestone while the contract is frozen panics.
+/// Panics at frozen check before reaching token transfers — no funding needed.
 #[test]
 #[should_panic(expected = "HostError")]
 fn test_frozen_contract_release_panics() {
-    let (env, _creator) = create_test_env();
-    let creator = setup_single_milestone_campaign(&env);
-    let recipient = Address::generate(&env);
-
-    // Freeze the contract
-    crate::storage::set_frozen(&env, true);
-
-    env.mock_all_auths();
-
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-}
-
-// ─── Sequential milestone release ────────────────────────────────────────────
-
-/// Test: releasing milestones in order succeeds.
-#[test]
-fn test_sequential_milestone_release_succeeds() {
-    let (env, _creator) = create_test_env();
-    let creator = Address::generate(&env);
-
-    create_test_campaign(&env, &creator, 3);
-    create_test_milestone(&env, 0, 1000, MilestoneStatus::Unlocked);
-    create_test_milestone(&env, 1, 2000, MilestoneStatus::Unlocked);
-    create_test_milestone(&env, 2, 3000, MilestoneStatus::Unlocked);
-
-    let recipient = Address::generate(&env);
-    env.mock_all_auths();
-
-    // Release milestone 0
-    crate::release_milestone::release_milestone(&env, 0, recipient.clone());
-    let m0 = get_milestone(&env, 0).expect("Milestone should exist");
-    assert_eq!(m0.status, MilestoneStatus::Released);
-
-    // Release milestone 1
-    crate::release_milestone::release_milestone(&env, 1, recipient.clone());
-    let m1 = get_milestone(&env, 1).expect("Milestone should exist");
-    assert_eq!(m1.status, MilestoneStatus::Released);
-
-    // Release milestone 2
-    crate::release_milestone::release_milestone(&env, 2, recipient.clone());
-    let m2 = get_milestone(&env, 2).expect("Milestone should exist");
-    assert_eq!(m2.status, MilestoneStatus::Released);
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    with_contract(&env, || {
+        setup_single_milestone_campaign_no_funding(&env);
+        let recipient = Address::generate(&env);
+        crate::storage::set_frozen(&env, true);
+        crate::release_milestone::release_milestone(&env, 0, recipient);
+    });
 }

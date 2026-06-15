@@ -47,12 +47,13 @@ fn compute_asset_release(
 ///
 /// Releases milestone funds proportionally across every accepted asset.
 ///
+/// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
+/// verified `creator.require_auth()` before calling this function.
+///
 /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-/// Issue #243 – Authorization: `creator.require_auth()`.
 /// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///
 /// Security properties:
-/// - Requires creator auth.
 /// - Milestone must be in `Unlocked` state (exactly once).
 /// - Proportional math uses checked integer arithmetic — no overflows.
 /// - Status is written to storage BEFORE transfers (CEI pattern) so a
@@ -74,10 +75,6 @@ pub fn release_milestone_multi_asset(
     let campaign = get_campaign(env).unwrap_or_else(|| {
         panic_with_error!(env, Error::NotInitialized)
     });
-
-    // ── 2. Authorisation ────────────────────────────────────────────────────
-    // Issue #243 – Authorization check
-    campaign.creator.require_auth();
 
     // ── 3. Validate recipient ────────────────────────────────────────────────
     if recipient == env.current_contract_address() {

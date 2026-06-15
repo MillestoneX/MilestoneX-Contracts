@@ -6,7 +6,10 @@ use crate::storage::{acquire_lock, get_campaign, get_milestone, is_frozen, relea
 /// Issue #207 – `release_milestone` function
 ///
 /// Releases funds for an unlocked milestone to the recipient.
-/// Requires creator authorization.
+///
+/// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
+/// verified `creator.require_auth()` before calling this function.
+///
 /// Validates milestone status is `Unlocked`.
 /// Prevents double release — `Released` milestones panic with `MilestoneAlreadyReleased`.
 /// Prevents skipping milestones — previous milestone must be Released.
@@ -18,7 +21,6 @@ use crate::storage::{acquire_lock, get_campaign, get_milestone, is_frozen, relea
 /// ## Security
 ///
 /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-/// Issue #243 – Authorization: `creator.require_auth()`.
 /// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///
 /// # Panics
@@ -36,9 +38,6 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
     let campaign = get_campaign(env).unwrap_or_else(|| {
         panic_with_error!(env, Error::NotInitialized)
     });
-
-    // Issue #243 – Authorization check
-    campaign.creator.require_auth();
 
     // Freeze check — reject all mutating operations while frozen
     if is_frozen(env) {

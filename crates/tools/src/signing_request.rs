@@ -98,7 +98,8 @@ impl TransactionBuilder {
             .with_description(desc);
 
         if let Some(m) = memo {
-            builder = builder.with_description(format!("{} [memo: {}]", builder.description, m));
+            let desc = format!("{} [memo: {}]", builder.description, m);
+            builder = builder.with_description(desc);
         }
 
         builder.build()

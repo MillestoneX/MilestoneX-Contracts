@@ -6,6 +6,7 @@
 use anyhow::{Result, Context, anyhow};
 use serde::{Serialize, Deserialize};
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 /// Configuration for streaming data processing
@@ -278,6 +279,7 @@ where
 /// Chunked data loader for reading large datasets efficiently
 pub struct ChunkedLoader<T> {
     config: StreamingConfig,
+    _phantom: PhantomData<T>,
 }
 
 impl<T> ChunkedLoader<T>
@@ -286,7 +288,7 @@ where
 {
     /// Create a new chunked loader
     pub fn new(config: StreamingConfig) -> Self {
-        Self { config }
+        Self { config, _phantom: PhantomData }
     }
 
     /// Load data from a file in chunks
@@ -310,7 +312,6 @@ where
         let mut reader = BufReader::new(file);
 
         let mut buffer = Vec::with_capacity(self.config.batch_size);
-        let mut chunk_buffer = String::new();
         let mut decoder = serde_json::Deserializer::from_reader(&mut reader).into_iter::<T>();
 
         for item in &mut decoder {
@@ -354,17 +355,15 @@ where
             .context(format!("Failed to open file: {}", file_path))?;
         let reader = BufReader::new(file);
 
-        let mut total_count = 0;
         let mut buffer = Vec::with_capacity(self.config.batch_size);
 
         // Parse JSON array in streaming fashion
-        let mut deserializer = serde_json::Deserializer::from_reader(reader);
-        let mut seq = deserializer.begin_array().unwrap();
+        let deserializer = serde_json::Deserializer::from_reader(reader);
+        let stream = deserializer.into_iter::<serde_json::Value>();
 
-        while let Ok(Some(item)) = seq.next() {
-            let record: T = item?;
+        for item in stream {
+            let record: T = serde_json::from_value(item?)?;
             buffer.push(record);
-            total_count += 1;
 
             if buffer.len() >= self.config.batch_size {
                 chunk_handler(&buffer)?;
@@ -377,7 +376,7 @@ where
             chunk_handler(&buffer)?;
         }
 
-        Ok(total_count)
+        Ok(buffer.len())
     }
 }
 

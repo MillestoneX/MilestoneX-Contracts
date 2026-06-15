@@ -27,11 +27,15 @@ pub const TEMPORARY_BUMP_THRESHOLD: u32 = 17_280;
 // ─── Internal bump helper ─────────────────────────────────────────────────────
 
 /// Bump a persistent key's TTL if it is below the threshold.
+/// No-ops safely when the key does not exist (fresh contract or
+/// never-written entry) — `extend_ttl` panics on missing keys.
 #[inline]
 fn bump_persistent(env: &Env, key: &DataKey) {
-    env.storage()
-        .persistent()
-        .extend_ttl(key, PERSISTENT_BUMP_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, PERSISTENT_BUMP_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+    }
 }
 
 // ─── Campaign ─────────────────────────────────────────────────────────────────
