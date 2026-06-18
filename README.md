@@ -4,9 +4,9 @@
 
 ## Contract Canonicalization
 
-Decision: `campaign/` (`orbitchain-campaign`) is the canonical crowdfunding contract for new development, audits, deployments, and integrations. It owns the production campaign model: milestone-based releases, multi-asset donations, refunds, freeze/upgrade controls, reentrancy protection, typed contract errors, and dashboard analytics.
+Decision: **Option B (conservative)** — keep `campaign/` (`orbitchain-campaign`) as the canonical crowdfunding contract for all new development, audits, deployments, and integrations. The `campaign/` implementation remains the authoritative contract for milestone flows, refunds, freeze/upgrade controls, reentrancy protection, typed errors, and dashboard analytics.
 
-`crates/contracts/core/` (`orbitchain-core`) is retained only as a legacy compatibility/reference contract. Do not add new campaign features there. Any remaining useful behavior from `core` should be migrated into `campaign/` before `core` is removed from the workspace in a future breaking release.
+`crates/contracts/core/` (`orbitchain-core`) is retained only as a legacy compatibility/reference contract. Do not add new campaign features there; use `campaign/` for any new logic, analytics endpoints, or deployment work. Any remaining behavior worth preserving from `core` should be migrated into `campaign/` before `core` is removed in a future breaking release.
 
 Canonical campaign analytics now live on `orbitchain-campaign`: use `get_campaign_report`, `get_platform_summary`, `get_dashboard_metrics`, `get_donation_count`, `get_donor_count`, `get_release_count`, and `get_total_tx_count` for dashboard and export workflows.
 

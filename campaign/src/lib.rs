@@ -1,7 +1,11 @@
 //! OrbitChain campaign smart contract.
 //!
-//! Manages the full campaign lifecycle: initialize, donate, release milestones,
-//! refunds, freeze/upgrade, and campaign status management on Stellar Soroban.
+//! This is the canonical campaign implementation for the repository: it owns
+//! the production campaign lifecycle, milestone handling, refunds,
+//! freeze/upgrade controls, analytics views, and all new campaign features.
+//!
+//! `crates/contracts/core/` remains a legacy reference contract and should not
+//! be used for new campaign development.
 
 #![no_std]
 
