@@ -8,6 +8,8 @@ Decision: `campaign/` (`orbitchain-campaign`) is the canonical crowdfunding cont
 
 `crates/contracts/core/` (`orbitchain-core`) is retained only as a legacy compatibility/reference contract. Do not add new campaign features there. Any remaining useful behavior from `core` should be migrated into `campaign/` before `core` is removed from the workspace in a future breaking release.
 
+Canonical campaign analytics now live on `orbitchain-campaign`: use `get_campaign_report`, `get_platform_summary`, `get_dashboard_metrics`, `get_donation_count`, `get_donor_count`, `get_release_count`, and `get_total_tx_count` for dashboard and export workflows.
+
 **OrbitChain** is an on-chain crowdfunding protocol built on the **Stellar Network** and **Soroban smart contracts**. It provides a transparent, trust-minimized platform where campaign creators can raise funds in native XLM or any Stellar-based asset (USDC, NGNT, custom tokens), and donors retain full visibility into how their contributions are deployed.
 
 The protocol is governed by a set of deterministic Soroban contracts — handling campaign lifecycle management, milestone-based fund release, multi-asset donation processing, and cross-chain token bridging — complemented by a comprehensive CLI toolchain for deployment, transaction signing, wallet integration, and network diagnostics.
