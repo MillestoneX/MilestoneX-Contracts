@@ -559,17 +559,6 @@ impl CampaignContract {
     }
 }
 
-/// Issue #175 – assert the current invoker is the campaign creator.
-///
-/// Reads the creator address from campaign storage and calls `require_auth()`.
-/// Panics with `Error::Unauthorized` if the campaign is not initialized;
-/// Soroban's auth framework panics if the invoker is not the creator.
-fn require_creator(env: &Env) {
-    let campaign =
-        get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
-    campaign.creator.require_auth();
-}
-
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
 fn get_token_address_for_asset(
