@@ -1,7 +1,10 @@
 use soroban_sdk::{Address, Env, token, panic_with_error};
 use crate::event;
 use crate::types::{Error, MilestoneStatus};
-use crate::storage::{acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone};
+use crate::storage::{
+    acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone,
+    storage_increment_release_count,
+};
 
 /// Issue #207 – `release_milestone` function
 ///
@@ -111,6 +114,7 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
     milestone.released_at = Some(timestamp);
     milestone.released_to = Some(recipient);
     set_milestone(env, milestone_index, &milestone);
+    storage_increment_release_count(env);
 
     // Issue #242 – Release reentrancy lock
     release_lock(env);

@@ -1,5 +1,9 @@
 //! OrbitChain core smart contract — campaign lifecycle, donations,
 //! withdrawals, analytics, and dashboard reporting.
+//!
+//! Deprecated: `campaign/` (`orbitchain-campaign`) is the canonical campaign
+//! contract. This crate remains in the workspace only for legacy compatibility
+//! and reference while remaining analytics behavior is migrated.
 
 #![no_std]
 use soroban_sdk::{
