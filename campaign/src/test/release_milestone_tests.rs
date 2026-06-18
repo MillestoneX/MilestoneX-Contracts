@@ -40,7 +40,9 @@ const BASE: u64 = 86400 * 365;
 fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
     // Pass an explicit admin address so the mock SAC stores admin storage properly
     let token_admin = Address::generate(env);
-    let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
+    let token_issuer = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address();
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
@@ -68,7 +70,7 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
 /// so that `balance()` and `transfer()` calls inside `release_milestone` don't
 /// panic with `Storage(MissingValue)` in the mock token.
 ///
-/// The mock SAC registered by `register_stellar_asset_contract(admin)` stores
+/// The mock SAC registered by `register_stellar_asset_contract_v2(admin)` stores
 /// the admin, making `StellarAssetClient::mint()` work with `mock_all_auths()`.
 ///
 /// Requires `env.mock_all_auths()` to be called before `with_contract()`.
