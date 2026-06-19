@@ -1,7 +1,11 @@
 //! OrbitChain campaign smart contract.
 //!
-//! Manages the full campaign lifecycle: initialize, donate, release milestones,
-//! refunds, freeze/upgrade, and campaign status management on Stellar Soroban.
+//! This is the canonical campaign implementation for the repository: it owns
+//! the production campaign lifecycle, milestone handling, refunds,
+//! freeze/upgrade controls, analytics views, and all new campaign features.
+//!
+//! `crates/contracts/core/` remains a legacy reference contract and should not
+//! be used for new campaign development.
 
 #![no_std]
 
@@ -16,8 +20,8 @@ pub mod types;
 pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
+use types::{CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus, PlatformSummary, StellarAsset, AssetInfo};
+use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, storage_get_donation_count, storage_increment_donation_count, storage_get_unique_donor_count, storage_increment_unique_donor_count, storage_get_release_count, storage_increment_asset_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
 
 pub const VERSION: u32 = 1;
 
@@ -179,10 +183,13 @@ impl CampaignContract {
 
         // Track per-asset donation for pro-rata refund calculation
         let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
+        storage_increment_asset_raised(&env, &asset_address, amount);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
         // Update donor record
-        let mut donor_record = get_donor(&env, &donor).unwrap_or(DonorRecord {
+        let existing_donor = get_donor(&env, &donor);
+        let is_new_donor = existing_donor.is_none();
+        let mut donor_record = existing_donor.unwrap_or(DonorRecord {
             donor: donor.clone(),
             total_donated: 0,
             asset: asset.clone(),
@@ -200,6 +207,10 @@ impl CampaignContract {
         donor_record.last_donation_ledger = env.ledger().sequence();
         donor_record.donation_count = donor_record.donation_count.saturating_add(1);
         set_donor(&env, &donor, &donor_record);
+        storage_increment_donation_count(&env);
+        if is_new_donor {
+            storage_increment_unique_donor_count(&env);
+        }
 
         // Issue #195 – milestone unlock check
         for i in 0..campaign.milestone_count {
@@ -227,6 +238,64 @@ impl CampaignContract {
     /// No auth required. Returns 0 if no donations yet.
     pub fn get_total_raised(env: Env) -> i128 {
         storage_get_total_raised(&env)
+    }
+
+    /// Returns the number of accepted donation calls.
+    pub fn get_donation_count(env: Env) -> u64 {
+        storage_get_donation_count(&env)
+    }
+
+    /// Returns the number of unique donors tracked by this campaign.
+    pub fn get_donor_count(env: Env) -> u32 {
+        storage_get_unique_donor_count(&env)
+    }
+
+    /// Returns the number of completed milestone releases.
+    pub fn get_release_count(env: Env) -> u64 {
+        storage_get_release_count(&env)
+    }
+
+    /// Returns all tracked campaign transactions: donations plus releases.
+    pub fn get_total_tx_count(env: Env) -> u64 {
+        storage_get_donation_count(&env)
+            .checked_add(storage_get_release_count(&env))
+            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow))
+    }
+
+    /// Returns dashboard-ready campaign analytics.
+    pub fn get_campaign_report(env: Env) -> Option<CampaignReport> {
+        get_campaign(&env).map(|campaign| build_campaign_report(&env, campaign))
+    }
+
+    /// Returns export-friendly aggregate counters for this contract instance.
+    pub fn get_platform_summary(env: Env) -> PlatformSummary {
+        let total_campaigns = if get_campaign(&env).is_some() { 1 } else { 0 };
+        let active_campaigns = active_campaign_count(&env);
+        let total_donations = storage_get_donation_count(&env);
+        let total_releases = storage_get_release_count(&env);
+        let total_transactions = total_donations
+            .checked_add(total_releases)
+            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
+
+        PlatformSummary {
+            total_campaigns,
+            active_campaigns,
+            total_donations,
+            total_releases,
+            total_transactions,
+        }
+    }
+
+    /// Returns compact metrics for campaign dashboards.
+    pub fn get_dashboard_metrics(env: Env) -> DashboardMetrics {
+        let summary = Self::get_platform_summary(env);
+        DashboardMetrics {
+            total_campaigns: summary.total_campaigns,
+            active_campaigns: summary.active_campaigns,
+            total_donations: summary.total_donations,
+            total_releases: summary.total_releases,
+            total_transactions: summary.total_transactions,
+        }
     }
 
     /// Issue #196 – Returns the donor record for the given address.
@@ -559,17 +628,6 @@ impl CampaignContract {
     }
 }
 
-/// Issue #175 – assert the current invoker is the campaign creator.
-///
-/// Reads the creator address from campaign storage and calls `require_auth()`.
-/// Panics with `Error::Unauthorized` if the campaign is not initialized;
-/// Soroban's auth framework panics if the invoker is not the creator.
-fn require_creator(env: &Env) {
-    let campaign =
-        get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
-    campaign.creator.require_auth();
-}
-
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
 fn get_token_address_for_asset(
@@ -743,5 +801,41 @@ fn calculate_refund_amount(
         1
     } else {
         refund
+    }
+}
+fn active_campaign_count(env: &Env) -> u64 {
+    match get_campaign(env) {
+        Some(campaign) if campaign.status.accepts_donations() => 1,
+        _ => 0,
+    }
+}
+
+fn build_campaign_report(env: &Env, campaign: CampaignData) -> CampaignReport {
+    let creator = campaign.creator.clone();
+    let remaining_amount = campaign.remaining();
+    let progress_bps = if campaign.goal_amount <= 0 || campaign.raised_amount <= 0 {
+        0
+    } else if campaign.raised_amount >= campaign.goal_amount {
+        10_000
+    } else {
+        let scaled = campaign
+            .raised_amount
+            .checked_mul(10_000)
+            .unwrap_or_else(|| panic_with_error(env, Error::Overflow));
+        (scaled / campaign.goal_amount) as u32
+    };
+
+    CampaignReport {
+        creator,
+        goal_amount: campaign.goal_amount,
+        raised_amount: campaign.raised_amount,
+        remaining_amount,
+        progress_bps,
+        end_time: campaign.end_time,
+        status: campaign.status,
+        milestone_count: campaign.milestone_count,
+        donor_count: storage_get_unique_donor_count(env),
+        donation_count: storage_get_donation_count(env),
+        release_count: storage_get_release_count(env),
     }
 }
