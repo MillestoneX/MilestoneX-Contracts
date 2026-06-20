@@ -383,6 +383,31 @@ fn test_donate_fails_below_minimum() {
     });
 }
 
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_donate_fails_on_donation_count_overflow() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let donor = Address::generate(&env);
+
+        // Manually create a donor record with max donation count
+        let record = DonorRecord {
+            donor: donor.clone(),
+            total_donated: 100,
+            asset: AssetInfo::Native,
+            last_donation_time: env.ledger().timestamp(),
+            last_donation_ledger: env.ledger().sequence(),
+            donation_count: u32::MAX,
+            refund_claimed: false,
+        };
+        set_donor(&env, &donor, &record);
+
+        CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
+    });
+}
+
 // ─── Refund negative-path tests ──────────────────────────────────────────────
 
 #[test]

@@ -202,15 +202,15 @@ fn invariant_total_donations_match_raised() {
         let asset_info = AssetInfo::Stellar(Address::generate(&env));
 
         let mut record_a = DonorRecord::new_for(donor_a.clone(), asset_info.clone());
-        record_a.apply_donation(amount_a, BASE, 1, asset_info.clone());
+        record_a.apply_donation(&env, amount_a, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_a, &record_a);
 
         let mut record_b = DonorRecord::new_for(donor_b.clone(), asset_info.clone());
-        record_b.apply_donation(amount_b, BASE, 1, asset_info.clone());
+        record_b.apply_donation(&env, amount_b, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_b, &record_b);
 
         let mut record_c = DonorRecord::new_for(donor_c.clone(), asset_info.clone());
-        record_c.apply_donation(amount_c, BASE, 1, asset_info.clone());
+        record_c.apply_donation(&env, amount_c, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_c, &record_c);
 
         // Update campaign raised_amount and global total_raised to match
