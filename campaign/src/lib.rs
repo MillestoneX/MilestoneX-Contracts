@@ -207,7 +207,10 @@ impl CampaignContract {
         donor_record.asset = asset.clone();
         donor_record.last_donation_time = env.ledger().timestamp();
         donor_record.last_donation_ledger = env.ledger().sequence();
-        donor_record.donation_count = donor_record.donation_count.saturating_add(1);
+        donor_record.donation_count = donor_record
+            .donation_count
+            .checked_add(1)
+            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
         set_donor(&env, &donor, &donor_record);
         storage_increment_donation_count(&env);
         if is_new_donor {

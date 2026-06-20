@@ -458,7 +458,11 @@ impl DonorRecord {
         self.total_donated = self.total_donated.saturating_add(amount);
         self.last_donation_time = time;
         self.last_donation_ledger = ledger;
-        self.donation_count = self.donation_count.saturating_add(1);
+        // NOTE: unlike the live donate() path in lib.rs, this helper has no
+        // `env` in scope so it cannot panic_with_error. It is also currently
+        // uncalled. kept as checked_add + saturating fallback so the count is
+        // at least never wrong below u32::MAX, matching total_donated above.
+        self.donation_count = self.donation_count.checked_add(1).unwrap_or(u32::MAX);
         self.asset = asset;
     }
 }
