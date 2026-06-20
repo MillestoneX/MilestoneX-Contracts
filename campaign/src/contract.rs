@@ -7,7 +7,7 @@ use soroban_sdk::{panic_with_error, Address, Env};
 use crate::event;
 use crate::storage::{get_campaign, set_campaign};
 use crate::types::{CampaignStatus, Error};
-use crate::validate_campaign_transition;
+use crate::{validate_campaign_transition, MAX_DEADLINE_GAP_SECONDS};
 
 /// Issue #212 – End the campaign early (before deadline).
 ///
@@ -62,12 +62,16 @@ pub fn cancel_campaign(env: &Env) {
 /// Issue #215 – Extend the campaign deadline.
 ///
 /// Extends the campaign's `end_time` to a new future timestamp.
+/// The new deadline cannot be more than ten years from the current ledger time;
+/// this preserves the contract's time arithmetic invariants for status views,
+/// refund windows, milestone release metadata, and campaign reports.
 /// Requires creator authorization.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
 /// - `Error::InvalidEndTime` if `new_end_time <= current ledger timestamp`
+/// - `Error::InvalidEndTime` if `new_end_time` is more than ten years out
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
 pub fn extend_deadline(env: &Env, new_end_time: u64) {
     let mut campaign = get_campaign(env)
@@ -81,7 +85,10 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
     }
 
     let current_time = env.ledger().timestamp();
-    if new_end_time <= current_time {
+    let max_end_time = current_time
+        .checked_add(MAX_DEADLINE_GAP_SECONDS)
+        .unwrap_or(u64::MAX);
+    if new_end_time <= current_time || new_end_time > max_end_time {
         panic_with_error!(env, Error::InvalidEndTime);
     }
 

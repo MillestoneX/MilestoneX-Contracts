@@ -40,6 +40,13 @@ stellar contract deploy   --wasm target/wasm32v1-none/release/campaign.wasm   --
 stellar contract invoke   --id $CONTRACT_ID   --source $STELLAR_SECRET_KEY   --network testnet   -- initialize
 ```
 
+## Deadline Extensions
+
+Campaign deadline extensions are capped at ten years from the current ledger
+timestamp. This prevents accidental or malicious `u64`-scale future dates from
+making status views, refund-window checks, milestone release arithmetic, and
+campaign reports meaningless while still allowing long-running campaigns.
+
 ## Troubleshooting
 
 - **`InsufficientFee`**: Add `--fee 1000000` to the deploy command.
