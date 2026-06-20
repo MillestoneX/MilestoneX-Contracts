@@ -108,6 +108,8 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen              = 80,
+    /// A ledger decrement operation underflowed, indicating an invariant violation.
+    LedgerUnderflow             = 81,
 }
 
 

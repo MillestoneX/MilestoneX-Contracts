@@ -184,8 +184,10 @@ pub fn release_milestone_multi_asset(
         // Update per-asset accounting
         let new_asset_raised = asset_raised
             .checked_sub(clamped_release)
-            .unwrap_or(0)
-            .max(0);
+            .unwrap_or_else(|| panic_with_error!(env, Error::LedgerUnderflow));
+        if new_asset_raised < 0 {
+            panic_with_error!(env, Error::LedgerUnderflow);
+        }
         storage_set_asset_raised(env, &token_address, new_asset_raised);
 
         total_released = total_released
@@ -196,8 +198,10 @@ pub fn release_milestone_multi_asset(
     // ── 8. Update global total-raised bookkeeping ────────────────────────────
     let new_total_raised = total_raised
         .checked_sub(total_released)
-        .unwrap_or(0)
-        .max(0);
+        .unwrap_or_else(|| panic_with_error!(env, Error::LedgerUnderflow));
+    if new_total_raised < 0 {
+        panic_with_error!(env, Error::LedgerUnderflow);
+    }
     storage_set_total_raised(env, new_total_raised);
 
     // Issue #242 – Release reentrancy lock
@@ -256,5 +260,68 @@ mod tests {
     fn proportional_release_negative_asset_raised() {
         let result = compute_asset_release(-100, 1000, 1000);
         assert_eq!(result, None);
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError")]
+    fn test_release_underflow_panics() {
+        use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
+        use crate::storage::{set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised};
+        use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+        use soroban_sdk::token::StellarAssetClient;
+
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let creator = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        let token_admin = Address::generate(&env);
+        let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
+        let token_client = StellarAssetClient::new(&env, &token_issuer);
+        token_client.mint(&env.current_contract_address(), &5000);
+
+        let mut assets = Vec::new(&env);
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(&env, "USDC"),
+            issuer: Some(token_issuer.clone()),
+        });
+
+        let campaign = CampaignData {
+            creator,
+            goal_amount: 3000,
+            raised_amount: 3000,
+            end_time: env.ledger().timestamp() + 86400,
+            status: CampaignStatus::Active,
+            accepted_assets: assets,
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: 0,
+            created_at_time: 0,
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+
+        let milestone = MilestoneData {
+            index: 0,
+            target_amount: 3000, // milestone_release = 3000
+            released_amount: 0,
+            description_hash: soroban_sdk::BytesN::from_array(&env, &[0; 32]),
+            status: MilestoneStatus::Unlocked,
+            released_at: None,
+            released_at_ledger: None,
+            release_tx: None,
+            released_to: None,
+        };
+        set_milestone(&env, 0, &milestone);
+
+        // Force underflow condition: total_raised = 1000, asset_raised = 500
+        // asset_release = 500 * 3000 / 1000 = 1500
+        // clamped_release = min(1500, 5000) = 1500
+        // new_asset_raised = 500 - 1500 => underflow!
+        storage_set_total_raised(&env, 1000);
+        storage_set_asset_raised(&env, &token_issuer, 500);
+
+        release_milestone_multi_asset(&env, 0, recipient);
     }
 }
