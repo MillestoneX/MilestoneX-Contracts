@@ -191,23 +191,15 @@ impl CampaignContract {
         // Update donor record
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
-        let mut donor_record = existing_donor.unwrap_or(DonorRecord {
-            donor: donor.clone(),
-            total_donated: 0,
-            asset: asset.clone(),
-            last_donation_time: 0,
-            last_donation_ledger: 0,
-            donation_count: 0,
-            refund_claimed: false,
-        });
-        donor_record.total_donated = donor_record
-            .total_donated
-            .checked_add(amount)
-            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
-        donor_record.asset = asset.clone();
-        donor_record.last_donation_time = env.ledger().timestamp();
-        donor_record.last_donation_ledger = env.ledger().sequence();
-        donor_record.donation_count = donor_record.donation_count.saturating_add(1);
+        let mut donor_record = existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
+
+        donor_record.apply_donation(
+            &env,
+            amount,
+            env.ledger().timestamp(),
+            env.ledger().sequence(),
+            asset.clone(),
+        );
         set_donor(&env, &donor, &donor_record);
         storage_increment_donation_count(&env);
         if is_new_donor {

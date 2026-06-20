@@ -5,35 +5,7 @@
     "mux_id": 0
   },
   "auth": [
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "",
-              "args": []
-            }
-          },
-          "sub_invocations": []
-        }
-      ],
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "",
-              "args": []
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ]
+    []
   ],
   "ledger": {
     "protocol_version": 26,
@@ -218,30 +190,6 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "DonationCount"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "u64": "1"
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 1036800
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "key": {
-                "vec": [
-                  {
                     "symbol": "DonorAssetDonation"
                   },
                   {
@@ -299,7 +247,7 @@
                       "symbol": "donation_count"
                     },
                     "val": {
-                      "u32": 1
+                      "u32": 4294967295
                     }
                   },
                   {
@@ -456,19 +404,19 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "TotalRaised"
+                    "symbol": "ReentrancyLock"
                   }
                 ]
               },
-              "durability": "persistent",
+              "durability": "temporary",
               "val": {
-                "i128": "100"
+                "bool": true
               }
             }
           },
           "ext": "v0"
         },
-        "live_until": 1036800
+        "live_until": 15
       },
       {
         "entry": {
@@ -480,13 +428,13 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "UniqueDonorCount"
+                    "symbol": "TotalRaised"
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "u32": 1
+                "i128": "100"
               }
             }
           },
@@ -638,45 +586,6 @@
                   "val": {
                     "u32": 1
                   }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "donation_received"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-              }
-            ],
-            "data": {
-              "vec": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                },
-                {
-                  "i128": "100"
-                },
-                {
-                  "string": "XLM"
-                },
-                {
-                  "i128": "100"
-                },
-                {
-                  "u64": "0"
                 }
               ]
             }
