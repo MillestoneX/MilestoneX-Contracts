@@ -541,11 +541,17 @@ impl CampaignContract {
     /// # Panics
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
+    /// - `Error::ContractFrozen` if the contract is currently frozen
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
+
+        // Freeze check — consistent with donate(), claim_refund(), and release_milestone()
+        if is_frozen(&env) {
+            panic_with_error(&env, Error::ContractFrozen);
+        }
 
         // Actually deploy the new WASM hash to the contract
         env.deployer()
