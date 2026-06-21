@@ -29,6 +29,12 @@ pub const VERSION: u32 = 1;
 /// Refunds are only permitted within this window after campaign end or cancellation.
 pub const REFUND_WINDOW: u64 = 30 * 24 * 60 * 60;
 
+/// Maximum amount of ledger time a campaign deadline may be extended.
+///
+/// Capping extensions at ten years keeps deadline arithmetic meaningful for
+/// views, refund windows, milestone release metadata, and downstream reports.
+pub const MAX_DEADLINE_GAP_SECONDS: u64 = 10 * 365 * 24 * 60 * 60;
+
 #[contract]
 pub struct CampaignContract;
 
@@ -483,6 +489,8 @@ impl CampaignContract {
     ///
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Only callable while campaign is Active or GoalReached.
+    /// New deadline must be in the future and no more than ten years from the
+    /// current ledger timestamp.
     pub fn extend_deadline(env: Env, new_end_time: u64) {
         contract::extend_deadline(&env, new_end_time);
     }

@@ -80,6 +80,34 @@ fn test_initialize_happy_path() {
     });
 }
 
+/// Deadline extension within the ten-year cap should succeed.
+#[test]
+fn test_extend_deadline_happy_path() {
+    let env = Env::default();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let end_time = env.ledger().timestamp() + 86_400;
+        let new_end_time = env.ledger().timestamp() + (2 * 86_400);
+
+        CampaignContract::initialize(
+            env.clone(),
+            creator,
+            1000,
+            end_time,
+            assets,
+            milestones,
+            0,
+        )
+        .unwrap();
+
+        CampaignContract::extend_deadline(env.clone(), new_end_time);
+
+        let campaign = get_campaign(&env).expect("Campaign should exist");
+        assert_eq!(campaign.end_time, new_end_time);
+    });
+}
+
 // ─── Happy path: Donate ───────────────────────────────────────────────────────
 
 /// Full donation flow that reaches the goal.

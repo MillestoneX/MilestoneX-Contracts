@@ -13,7 +13,7 @@ use crate::types::{
     MilestoneStatus, Error, DataKey,
 };
 use crate::storage::{set_campaign, set_donor, set_milestone, get_campaign};
-use crate::CampaignContract;
+use crate::{CampaignContract, MAX_DEADLINE_GAP_SECONDS};
 use crate::CampaignContractClient;
 use super::with_contract;
 
@@ -633,6 +633,19 @@ fn test_extend_deadline_fails_past_time() {
         initialize_default_campaign(&env);
         let past_time = env.ledger().timestamp() - 1;
         CampaignContract::extend_deadline(env.clone(), past_time);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #14)")]
+fn test_extend_deadline_fails_absurd_future_time() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let too_far = env.ledger().timestamp() + MAX_DEADLINE_GAP_SECONDS + 1;
+        CampaignContract::extend_deadline(env.clone(), too_far);
     });
 }
 
