@@ -1,6 +1,6 @@
 // src/types.rs
 
-use soroban_sdk::{contracterror, contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contracttype, contracterror, Address, BytesN, String, Vec, Env};
 
 // ─── Error enum ───────────────────────────────────────────────────────────────
 
@@ -14,101 +14,102 @@ use soroban_sdk::{contracterror, contracttype, Address, BytesN, String, Vec};
 pub enum Error {
     // ── Requested contract error codes ────────────────────────────────────
     /// `initialize` called on an already-initialised contract.
-    AlreadyInitialized = 1,
+    AlreadyInitialized          = 1,
     /// Contract has not been initialised yet.
-    NotInitialized = 2,
+    NotInitialized              = 2,
     /// Caller is not authorised to perform the operation.
-    Unauthorized = 3,
+    Unauthorized                = 3,
     /// The campaign deadline has already passed.
-    CampaignEnded = 4,
+    CampaignEnded               = 4,
     /// Operation requires the campaign to be `Active` or `GoalReached`.
-    CampaignNotActive = 5,
+    CampaignNotActive           = 5,
     /// Donated asset is not in the campaign's accepted assets list.
-    AssetNotAccepted = 6,
+    AssetNotAccepted            = 6,
     /// Donation amount is below the campaign's minimum threshold.
-    DonationTooSmall = 7,
+    DonationTooSmall            = 7,
     /// Milestone index is out of range for this campaign.
-    MilestoneNotFound = 8,
+    MilestoneNotFound           = 8,
     /// Milestone has not been unlocked yet and cannot be released.
-    MilestoneNotUnlocked = 9,
+    MilestoneNotUnlocked        = 9,
     /// A previous milestone must be released before this one can be released.
     PreviousMilestoneNotReleased = 10,
     /// Cannot cancel the campaign while it still holds funds.
-    CannotCancelWithFunds = 11,
+    CannotCancelWithFunds       = 11,
     /// Refunds are no longer permitted for this campaign.
-    RefundWindowClosed = 12,
+    RefundWindowClosed          = 12,
     /// `goal_amount` must be strictly positive.
-    InvalidGoalAmount = 13,
+    InvalidGoalAmount           = 13,
     /// `end_time` must be strictly greater than the current ledger timestamp.
-    InvalidEndTime = 14,
+    InvalidEndTime              = 14,
     /// Milestones must be strictly ascending and the last must equal `goal_amount`.
-    InvalidMilestones = 15,
+    InvalidMilestones           = 15,
     /// Contract does not hold enough funds to fulfil the requested transfer.
     InsufficientContractBalance = 16,
     /// A checked arithmetic operation overflowed.
-    Overflow = 17,
+    Overflow                    = 17,
 
     // ── Additional contract errors ─────────────────────────────────────────
     /// `accepted_assets` must be non-empty.
-    InvalidAssets = 18,
+    InvalidAssets               = 18,
     /// `asset_code` must be non-empty and ≤ 12 characters (Stellar limit).
-    InvalidAssetCode = 19,
+    InvalidAssetCode            = 19,
     /// Last milestone `target_amount` does not equal `goal_amount`.
-    MilestoneMismatch = 20,
+    MilestoneMismatch           = 20,
     /// Milestone count must be in the range [1, MAX_MILESTONES].
-    InvalidMilestoneCount = 21,
+    InvalidMilestoneCount       = 21,
     /// The requested campaign status transition is not permitted.
-    InvalidCampaignTransition = 22,
+    InvalidCampaignTransition   = 22,
     /// The requested milestone status transition is not permitted.
-    InvalidMilestoneTransition = 23,
+    InvalidMilestoneTransition  = 23,
     /// Cannot transition to `GoalReached` — raised amount < goal.
-    GoalNotReached = 24,
+    GoalNotReached              = 24,
 
     /// A storage read returned an unexpectedly invalid value.
-    InvalidStorageValue = 25,
+    InvalidStorageValue         = 25,
     /// A storage write failed (entry too large, quota exceeded, etc.).
-    StorageWriteError = 26,
+    StorageWriteError           = 26,
 
     // ── Asset / transfer ───────────────────────────────────────────────── 3x
     /// Recipient address is the contract itself — would lock funds permanently.
-    InvalidRecipient = 30,
+    InvalidRecipient            = 30,
     /// The asset has no issuer address; transfers require a token contract address.
-    MissingIssuerAddress = 31,
+    MissingIssuerAddress        = 31,
     /// Computed release amount is zero after proportional rounding.
-    ZeroReleaseAmount = 32,
+    ZeroReleaseAmount           = 32,
     /// `released_amount` already equals `target_amount`; nothing left to release.
-    NothingToRelease = 33,
+    NothingToRelease            = 33,
     /// `released_amount` would exceed `target_amount` after this operation.
     MilestoneReleasedExceedsTarget = 34,
 
     // ── Milestone ──────────────────────────────────────────────────────── 4x
     /// Milestone is already in the `Released` state.
-    MilestoneAlreadyReleased = 40,
+    MilestoneAlreadyReleased    = 40,
     /// All milestones must be Released before the campaign can be concluded.
-    UnreleasedMilestonesExist = 41,
+    UnreleasedMilestonesExist   = 41,
 
     // ── Refunds ────────────────────────────────────────────────────────── 5x
     /// Refunds are only permitted when the campaign is `Cancelled` or
     /// `Ended` without reaching the goal.
-    RefundNotPermitted = 50,
+    RefundNotPermitted          = 50,
     /// No donor record found for the requesting address.
-    NoDonorRecord = 51,
+    NoDonorRecord               = 51,
     /// Donor has already claimed a refund for this campaign.
-    RefundAlreadyClaimed = 52,
+    RefundAlreadyClaimed        = 52,
     // RefundWindowClosed is defined above as RefundWindowClosed = 12
 
     // ── Re-entrancy / concurrency ──────────────────────────────────────── 6x
     /// A re-entrant call was detected; operation aborted.
-    ReentrantCall = 60,
+    ReentrantCall               = 60,
 
     // ── Amount validation ───────────────────────────────────────────────────────── 7x
     /// A generic negative or otherwise invalid amount was supplied.
-    InvalidAmount = 70,
+    InvalidAmount               = 70,
 
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
-    ContractFrozen = 80,
+    ContractFrozen              = 80,
 }
+
 
 // ─── Campaign lifecycle ───────────────────────────────────────────────────────
 
@@ -162,11 +163,11 @@ impl CampaignStatus {
     pub fn can_transition_to(self, next: Self) -> bool {
         matches!(
             (self, next),
-            (Self::Active, Self::GoalReached)
-                | (Self::Active, Self::Ended)
-                | (Self::Active, Self::Cancelled)
-                | (Self::GoalReached, Self::Ended)
-                | (Self::GoalReached, Self::Cancelled)
+            (Self::Active,      Self::GoalReached)
+            | (Self::Active,    Self::Ended)
+            | (Self::Active,    Self::Cancelled)
+            | (Self::GoalReached, Self::Ended)
+            | (Self::GoalReached, Self::Cancelled)
         )
     }
 }
@@ -450,14 +451,17 @@ impl DonorRecord {
         }
     }
 
-    /// Apply a new donation to this record.  Returns an error string (for
-    /// debug builds) rather than panicking so the call site can choose how
-    /// to surface it.
-    pub fn apply_donation(&mut self, amount: i128, time: u64, ledger: u32, asset: AssetInfo) {
-        self.total_donated = self.total_donated.saturating_add(amount);
+    /// Apply a new donation to this record. Panics with `Error::Overflow` if
+    /// `total_donated` or `donation_count` overflows.
+    pub fn apply_donation(&mut self, env: &Env, amount: i128, time: u64, ledger: u32, asset: AssetInfo) {
+        self.total_donated = self.total_donated
+            .checked_add(amount)
+            .unwrap_or_else(|| env.panic_with_error(Error::Overflow));
         self.last_donation_time = time;
         self.last_donation_ledger = ledger;
-        self.donation_count = self.donation_count.saturating_add(1);
+        self.donation_count = self.donation_count
+            .checked_add(1)
+            .unwrap_or_else(|| env.panic_with_error(Error::Overflow));
         self.asset = asset;
     }
 }
@@ -565,3 +569,5 @@ pub struct RefundProcessedEvent {
     pub asset: AssetInfo,
     pub ledger: u32,
 }
+
+

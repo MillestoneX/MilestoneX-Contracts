@@ -6,16 +6,16 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, BytesN, Env, String, Vec};
+use soroban_sdk::{Address, Env, String, Vec, BytesN};
 
-use super::with_contract;
-use crate::storage::{get_campaign, set_campaign, set_donor, set_milestone};
 use crate::types::{
-    AssetInfo, CampaignData, CampaignStatus, DataKey, DonorRecord, Error, MilestoneData,
-    MilestoneStatus, StellarAsset,
+    CampaignData, CampaignStatus, DonorRecord, AssetInfo, StellarAsset, MilestoneData,
+    MilestoneStatus, Error, DataKey,
 };
-use crate::CampaignContract;
+use crate::storage::{set_campaign, set_donor, set_milestone, get_campaign};
+use crate::{CampaignContract, MAX_DEADLINE_GAP_SECONDS};
 use crate::CampaignContractClient;
+use super::with_contract;
 
 /// Base ledger timestamp (1 year in seconds) so we can safely subtract
 /// to simulate "past" end_times without underflow.
@@ -82,7 +82,12 @@ fn fund_donor(env: &Env, donor: &Address) {
     set_donor(env, donor, &record);
 }
 
-fn create_donor_record(env: &Env, donor: &Address, total_donated: i128, refund_claimed: bool) {
+fn create_donor_record(
+    env: &Env,
+    donor: &Address,
+    total_donated: i128,
+    refund_claimed: bool,
+) {
     let record = DonorRecord {
         donor: donor.clone(),
         total_donated,
@@ -127,13 +132,8 @@ fn test_initialize_fails_zero_goal() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            0,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 0, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
     });
 }
@@ -147,13 +147,8 @@ fn test_initialize_fails_negative_goal() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            -100,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator, -100, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
     });
 }
@@ -168,13 +163,8 @@ fn test_initialize_fails_past_end_time() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() - 1;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
     });
 }
@@ -189,13 +179,8 @@ fn test_initialize_fails_empty_assets() {
         let end_time = env.ledger().timestamp() + 100_000;
         let empty_assets: Vec<StellarAsset> = Vec::new(&env);
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            empty_assets,
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 1000, end_time,
+            empty_assets, default_milestones(&env), 0,
         );
     });
 }
@@ -214,13 +199,8 @@ fn test_initialize_fails_empty_asset_code() {
             issuer: Some(Address::generate(&env)),
         });
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            assets,
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 1000, end_time,
+            assets, default_milestones(&env), 0,
         );
     });
 }
@@ -235,13 +215,8 @@ fn test_initialize_fails_zero_milestones() {
         let end_time = env.ledger().timestamp() + 100_000;
         let empty_milestones: Vec<MilestoneData> = Vec::new(&env);
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            empty_milestones,
-            0,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), empty_milestones, 0,
         );
     });
 }
@@ -269,13 +244,8 @@ fn test_initialize_fails_too_many_milestones() {
             });
         }
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            6000,
-            end_time,
-            default_accepted_assets(&env),
-            milestones,
-            0,
+            env.clone(), creator, 6000, end_time,
+            default_accepted_assets(&env), milestones, 0,
         );
     });
 }
@@ -290,35 +260,22 @@ fn test_initialize_fails_milestone_targets_not_ascending() {
         let end_time = env.ledger().timestamp() + 100_000;
         let mut milestones: Vec<MilestoneData> = Vec::new(&env);
         milestones.push_back(MilestoneData {
-            index: 0,
-            target_amount: 500,
-            released_amount: 0,
+            index: 0, target_amount: 500, released_amount: 0,
             description_hash: BytesN::from_array(&env, &[0u8; 32]),
             status: MilestoneStatus::Locked,
-            released_at: None,
-            released_at_ledger: None,
-            release_tx: None,
-            released_to: None,
+            released_at: None, released_at_ledger: None,
+            release_tx: None, released_to: None,
         });
         milestones.push_back(MilestoneData {
-            index: 1,
-            target_amount: 300,
-            released_amount: 0,
+            index: 1, target_amount: 300, released_amount: 0,
             description_hash: BytesN::from_array(&env, &[0u8; 32]),
             status: MilestoneStatus::Locked,
-            released_at: None,
-            released_at_ledger: None,
-            release_tx: None,
-            released_to: None,
+            released_at: None, released_at_ledger: None,
+            release_tx: None, released_to: None,
         });
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            500,
-            end_time,
-            default_accepted_assets(&env),
-            milestones,
-            0,
+            env.clone(), creator, 500, end_time,
+            default_accepted_assets(&env), milestones, 0,
         );
     });
 }
@@ -333,24 +290,15 @@ fn test_initialize_fails_milestone_last_target_not_equal_goal() {
         let end_time = env.ledger().timestamp() + 100_000;
         let mut milestones: Vec<MilestoneData> = Vec::new(&env);
         milestones.push_back(MilestoneData {
-            index: 0,
-            target_amount: 500,
-            released_amount: 0,
+            index: 0, target_amount: 500, released_amount: 0,
             description_hash: BytesN::from_array(&env, &[0u8; 32]),
             status: MilestoneStatus::Locked,
-            released_at: None,
-            released_at_ledger: None,
-            release_tx: None,
-            released_to: None,
+            released_at: None, released_at_ledger: None,
+            release_tx: None, released_to: None,
         });
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            milestones,
-            0,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), milestones, 0,
         );
     });
 }
@@ -427,16 +375,36 @@ fn test_donate_fails_below_minimum() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            100,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 100,
         );
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 50, AssetInfo::Native);
+    });
+}
+
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_donate_fails_on_donation_count_overflow() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let donor = Address::generate(&env);
+
+        // Manually create a donor record with max donation count
+        let record = DonorRecord {
+            donor: donor.clone(),
+            total_donated: 100,
+            asset: AssetInfo::Native,
+            last_donation_time: env.ledger().timestamp(),
+            last_donation_ledger: env.ledger().sequence(),
+            donation_count: u32::MAX,
+            refund_claimed: false,
+        };
+        set_donor(&env, &donor, &record);
+
+        CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
     });
 }
 
@@ -538,13 +506,8 @@ fn test_is_refund_eligible_fails_goal_reached() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
         let mut campaign = get_campaign(&env).unwrap();
         campaign.status = CampaignStatus::GoalReached;
@@ -567,13 +530,8 @@ fn test_is_refund_eligible_fails_window_closed() {
         // Initialize with future end_time, then manually set to past + Ended
         let future_end = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator.clone(),
-            1000,
-            future_end,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator.clone(), 1000, future_end,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
         let mut campaign = get_campaign(&env).unwrap();
         campaign.end_time = env.ledger().timestamp() - (31 * 24 * 60 * 60);
@@ -614,10 +572,7 @@ fn test_is_refund_eligible_fails_ended_with_released_milestones() {
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
-        assert!(
-            !eligible,
-            "Ended campaign with released milestone should not allow refunds"
-        );
+        assert!(!eligible, "Ended campaign with released milestone should not allow refunds");
     });
 }
 
@@ -707,6 +662,19 @@ fn test_extend_deadline_fails_past_time() {
 }
 
 #[test]
+#[should_panic(expected = "Error(Contract, #14)")]
+fn test_extend_deadline_fails_absurd_future_time() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let too_far = env.ledger().timestamp() + MAX_DEADLINE_GAP_SECONDS + 1;
+        CampaignContract::extend_deadline(env.clone(), too_far);
+    });
+}
+
+#[test]
 #[should_panic]
 fn test_extend_deadline_fails_cancelled() {
     let env = make_env();
@@ -763,10 +731,7 @@ fn test_claim_refund_eligible_cancelled() {
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 500, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
-        assert!(
-            eligible,
-            "Donor should be eligible for refund on cancelled campaign"
-        );
+        assert!(eligible, "Donor should be eligible for refund on cancelled campaign");
     });
 }
 
@@ -837,13 +802,8 @@ fn test_refund_window_edge_boundary() {
         // Initialize with future end_time, then manually set to exact boundary
         let future_end = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator.clone(),
-            1000,
-            future_end,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator.clone(), 1000, future_end,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
         let mut campaign = get_campaign(&env).unwrap();
         campaign.end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60);
@@ -866,13 +826,8 @@ fn test_refund_window_just_after_boundary() {
         // Initialize with future end_time, then manually set to just past boundary
         let future_end = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator.clone(),
-            1000,
-            future_end,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator.clone(), 1000, future_end,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
         let mut campaign = get_campaign(&env).unwrap();
         campaign.end_time = env.ledger().timestamp() - (30 * 24 * 60 * 60 + 1);
@@ -881,10 +836,7 @@ fn test_refund_window_just_after_boundary() {
         let donor = Address::generate(&env);
         create_donor_record(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
-        assert!(
-            !eligible,
-            "Should NOT be eligible just past 30-day boundary"
-        );
+        assert!(!eligible, "Should NOT be eligible just past 30-day boundary");
     });
 }
 
@@ -912,10 +864,7 @@ fn test_upgrade_succeeds_when_not_frozen() {
         // Verify the contract is not frozen by default; upgrade should not panic on the
         // freeze check (it will panic later when the deployer rejects the dummy hash,
         // so we only assert that is_frozen returns false before the call).
-        assert!(
-            !crate::storage::is_frozen(&env),
-            "Contract should not be frozen initially"
-        );
+        assert!(!crate::storage::is_frozen(&env), "Contract should not be frozen initially");
     });
 }
 
@@ -928,10 +877,7 @@ fn test_upgrade_succeeds_after_unfreeze() {
         CampaignContract::freeze(env.clone());
         assert!(crate::storage::is_frozen(&env), "Contract should be frozen");
         CampaignContract::unfreeze(env.clone());
-        assert!(
-            !crate::storage::is_frozen(&env),
-            "Contract should be unfrozen after unfreeze"
-        );
+        assert!(!crate::storage::is_frozen(&env), "Contract should be unfrozen after unfreeze");
     });
 }
 
@@ -960,13 +906,8 @@ fn test_initialize_requires_auth() {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
         let _ = CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            default_accepted_assets(&env),
-            default_milestones(&env),
-            0,
+            env.clone(), creator, 1000, end_time,
+            default_accepted_assets(&env), default_milestones(&env), 0,
         );
     });
 }
@@ -1020,5 +961,81 @@ fn test_cancel_then_refund_eligible() {
         create_donor_record(&env, &donor, 500, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
         assert!(eligible);
+    });
+}
+
+// ─── Freeze invariant regression tests ───────────────────────────────────────
+
+#[test]
+#[should_panic]
+fn test_end_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::end_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::cancel_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_extend_deadline_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+    });
+}
+
+#[test]
+fn test_end_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::end_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Ended);
+    });
+}
+
+#[test]
+fn test_cancel_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::cancel_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Cancelled);
+    });
+}
+
+#[test]
+fn test_extend_deadline_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(campaign.end_time, new_end);
     });
 }
