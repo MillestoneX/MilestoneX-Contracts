@@ -7,7 +7,8 @@
 ##   make clippy       - Lint code
 
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny \
+        check-cargo-audit check-cargo-deny
 
 # Default target
 build: build-wasm build-tools
@@ -80,14 +81,30 @@ deploy-testnet: build-wasm
 	bash scripts/deploy.sh testnet
 
 
+# Ensure cargo-audit is installed before running vulnerability scans
+check-cargo-audit:
+	@if ! command -v cargo-audit >/dev/null 2>&1; then \
+		echo "ERROR: cargo-audit is not installed."; \
+		echo "Install it with: cargo install cargo-audit --locked"; \
+		exit 1; \
+	fi
+
+# Ensure cargo-deny is installed before running license checks
+check-cargo-deny:
+	@if ! command -v cargo-deny >/dev/null 2>&1; then \
+		echo "ERROR: cargo-deny is not installed."; \
+		echo "Install it with: cargo install cargo-deny --locked"; \
+		exit 1; \
+	fi
+
 # Run cargo-audit for vulnerability scanning
-audit:
+audit: check-cargo-audit
 	@echo "🔒 Running security audit..."
 	cargo audit
 	@echo "✅ Security audit passed"
 
 # Run cargo-deny for license compliance
-deny:
+deny: check-cargo-deny
 	@echo "📋 Checking license compliance..."
 	cargo deny check
 	@echo "✅ License check passed"
