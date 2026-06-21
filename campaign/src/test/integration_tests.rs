@@ -93,16 +93,8 @@ fn test_extend_deadline_happy_path() {
         let end_time = env.ledger().timestamp() + 86_400;
         let new_end_time = env.ledger().timestamp() + (2 * 86_400);
 
-        CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            assets,
-            milestones,
-            0,
-        )
-        .unwrap();
+        CampaignContract::initialize(env.clone(), creator, 1000, end_time, assets, milestones, 0)
+            .unwrap();
 
         CampaignContract::extend_deadline(env.clone(), new_end_time);
 

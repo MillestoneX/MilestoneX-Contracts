@@ -213,7 +213,8 @@ impl CampaignContract {
         // Update donor record
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
-        let mut donor_record = existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
+        let mut donor_record =
+            existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
 
         donor_record.apply_donation(
             &env,
