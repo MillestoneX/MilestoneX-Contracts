@@ -19,15 +19,14 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: short
-
-# Workspace members that compile to wasm32 Soroban contracts. crates/tools
-# is intentionally excluded — it is a native CLI binary, not a contract, and
-# has its own dev-tooling lint/test debt tracked separately.
-CONTRACTS: >-
-  -p orbitchain-campaign
-  -p orbitchain-common
-  -p orbitchain-core
-  -p orbitchain-token-bridge
+  # Workspace members that compile to wasm32 Soroban contracts. crates/tools
+  # is intentionally excluded — it is a native CLI binary, not a contract, and
+  # has its own dev-tooling lint/test debt tracked separately.
+  CONTRACTS: >-
+    -p orbitchain-campaign
+    -p orbitchain-common
+    -p orbitchain-core
+    -p orbitchain-token-bridge
 
 jobs:
   fmt:
