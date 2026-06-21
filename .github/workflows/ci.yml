@@ -1,0 +1,110 @@
+name: CI
+
+# Lock the token down — this workflow only reads the repo.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # Cancel superseded PR runs but never cancel the push-to-main run
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+  # Workspace members that compile to wasm32 Soroban contracts. crates/tools
+  # is intentionally excluded — it is a native CLI binary, not a contract, and
+  # has its own dev-tooling lint/test debt tracked separately.
+  CONTRACTS: >-
+    -p orbitchain-campaign
+    -p orbitchain-common
+    -p orbitchain-core
+    -p orbitchain-token-bridge
+
+jobs:
+  fmt:
+    name: Format check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        # Honors rust-toolchain.toml (channel + targets + components)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # No `cache: true` here — Swatinem/rust-cache handles caching below.
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo fmt --check (contracts)
+        # Scope to the four Soroban contract crates only. crates/tools is a
+        # native CLI with separate formatting conventions and pre-existing
+        # rustfmt drift that is intentionally out of scope for this CI gate
+        # — see the PR description for the tracked follow-up.
+        run: cargo fmt ${{ env.CONTRACTS }} -- --check
+
+  clippy:
+    name: Clippy lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo clippy (contracts)
+        # Scope is intentionally narrower than the workspace because
+        # crates/tools is a native CLI with separate lint conventions.
+        run: cargo clippy ${{ env.CONTRACTS }} -- -D warnings
+
+  test:
+    name: Tests (host target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo test (contracts)
+        run: cargo test ${{ env.CONTRACTS }}
+
+  wasm-check:
+    name: WASM compile check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # wasm32v1-none is the target Soroban SDK 26.x requires on stable
+          # Rust (>=1.84); wasm32-unknown-unknown on Rust >=1.82 enables
+          # reference-types/multi-value which the Soroban host cannot honour.
+          targets: wasm32v1-none
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: cargo check --target wasm32v1-none (contracts)
+        run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none

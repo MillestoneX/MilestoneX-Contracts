@@ -8,6 +8,11 @@
 //! be used for new campaign development.
 
 #![no_std]
+// `Events::publish` and a few call sites on `Ledger` are marked deprecated in
+// soroban-sdk 26.x in favour of `#[contractevent]` and the new ledger APIs.
+// Migrating every call site here is tracked as a follow-up issue; suppressing
+// the warning keeps CI clean without changing the published event topics.
+#![allow(deprecated)]
 
 pub mod contract;
 pub mod event;
@@ -19,9 +24,20 @@ pub mod storage;
 pub mod types;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus, PlatformSummary, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, storage_get_donation_count, storage_increment_donation_count, storage_get_unique_donor_count, storage_increment_unique_donor_count, storage_get_release_count, storage_increment_asset_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use storage::{
+    acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
+    increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
+    set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
+    storage_get_unique_donor_count, storage_increment_asset_raised,
+    storage_increment_donation_count, storage_increment_unique_donor_count,
+    storage_set_total_raised,
+};
+use types::{
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
+    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    PlatformSummary, StellarAsset,
+};
 
 pub const VERSION: u32 = 1;
 
@@ -85,7 +101,7 @@ impl CampaignContract {
 
         validate_assets(&env, &accepted_assets)?;
 
-        let milestone_count = milestones.len() as u32;
+        let milestone_count = milestones.len();
         if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {
             panic_with_error(&env, Error::InvalidMilestoneCount);
         }
@@ -118,7 +134,7 @@ impl CampaignContract {
                 creator,
                 goal_amount,
                 end_time,
-                asset_count: accepted_assets.len() as u32,
+                asset_count: accepted_assets.len(),
                 milestone_count,
                 created_at_ledger: env.ledger().sequence(),
             },
@@ -197,7 +213,8 @@ impl CampaignContract {
         // Update donor record
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
-        let mut donor_record = existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
+        let mut donor_record =
+            existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
 
         donor_record.apply_donation(
             &env,
@@ -347,10 +364,7 @@ impl CampaignContract {
         };
 
         let refund_eligibility = check_refund_eligibility(&env, &campaign, &donor_record);
-        match refund_eligibility {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        refund_eligibility.is_ok()
     }
 
     /// Claim a refund for a donation.
@@ -601,16 +615,6 @@ impl CampaignContract {
     }
 }
 
-/// Issue #175 – assert the current invoker is the campaign creator.
-///
-/// Reads the creator address from campaign storage and calls `require_auth()`.
-/// Panics with `Error::Unauthorized` if the campaign is not initialized;
-/// Soroban's auth framework panics if the invoker is not the creator.
-fn require_creator(env: &Env) {
-    let campaign = get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
-    campaign.creator.require_auth();
-}
-
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
 fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
@@ -640,7 +644,7 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
 
 fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     for asset in assets.iter() {
-        if asset.asset_code.len() == 0 {
+        if asset.asset_code.is_empty() {
             panic_with_error(env, Error::InvalidAssetCode);
         }
     }
@@ -709,7 +713,7 @@ fn check_refund_eligibility(
         CampaignStatus::Ended => {
             // Refunds only if NO milestones have been released
             for i in 0..campaign.milestone_count {
-                if let Some(milestone) = get_milestone(&env, i) {
+                if let Some(milestone) = get_milestone(env, i) {
                     if milestone.status == MilestoneStatus::Released {
                         return Err(Error::RefundNotPermitted);
                     }
@@ -734,7 +738,9 @@ fn check_refund_eligibility(
 }
 
 /// Validates campaign status transitions; panics if invalid.
-#[must_use]
+///
+/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
+/// attribute is needed (clippy `double_must_use`).
 pub fn validate_campaign_transition(
     env: &Env,
     current_status: &CampaignStatus,
@@ -757,7 +763,9 @@ pub fn validate_campaign_transition(
 }
 
 /// Validates milestone status transitions; panics if invalid.
-#[must_use]
+///
+/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
+/// attribute is needed (clippy `double_must_use`).
 pub fn validate_milestone_transition(
     env: &Env,
     current_status: &MilestoneStatus,
@@ -784,10 +792,10 @@ mod test {
     pub mod claim_refund_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
+    pub mod invariant_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
-    pub mod invariant_tests;
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.

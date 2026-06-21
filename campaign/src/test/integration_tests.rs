@@ -5,19 +5,22 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::Address as AddressTestUtils;
-use soroban_sdk::{Address, Env, Vec, String, BytesN};
+use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
-use crate::types::{CampaignStatus, CampaignData, DonorRecord, AssetInfo, StellarAsset, MilestoneStatus, MilestoneData};
-use crate::storage::{get_campaign, get_milestone};
-use crate::CampaignContract;
 use super::with_contract;
+use crate::storage::{get_campaign, get_milestone};
+use crate::types::{
+    AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus,
+    StellarAsset,
+};
+use crate::CampaignContract;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /// Builds a minimal valid campaign setup and returns (creator, assets, milestones).
 fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<MilestoneData>) {
     let creator = Address::generate(env);
-    
+
     let mut assets: Vec<StellarAsset> = Vec::new(env);
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
@@ -90,16 +93,8 @@ fn test_extend_deadline_happy_path() {
         let end_time = env.ledger().timestamp() + 86_400;
         let new_end_time = env.ledger().timestamp() + (2 * 86_400);
 
-        CampaignContract::initialize(
-            env.clone(),
-            creator,
-            1000,
-            end_time,
-            assets,
-            milestones,
-            0,
-        )
-        .unwrap();
+        CampaignContract::initialize(env.clone(), creator, 1000, end_time, assets, milestones, 0)
+            .unwrap();
 
         CampaignContract::extend_deadline(env.clone(), new_end_time);
 
@@ -129,7 +124,8 @@ fn test_donate_happy_path() {
             assets.clone(),
             milestones.clone(),
             0,
-        ).unwrap();
+        )
+        .unwrap();
 
         // First donation
         let donor1 = Address::generate(&env);
@@ -154,11 +150,19 @@ fn test_donate_happy_path() {
 
         let campaign = get_campaign(&env).unwrap();
         assert_eq!(campaign.raised_amount, 1000);
-        assert_eq!(campaign.status, CampaignStatus::GoalReached, "Campaign should transition to GoalReached");
+        assert_eq!(
+            campaign.status,
+            CampaignStatus::GoalReached,
+            "Campaign should transition to GoalReached"
+        );
 
         // Verify milestone was unlocked
         let milestone = get_milestone(&env, 0).expect("Milestone should exist");
-        assert_eq!(milestone.status, MilestoneStatus::Unlocked, "Milestone should be unlocked when goal is reached");
+        assert_eq!(
+            milestone.status,
+            MilestoneStatus::Unlocked,
+            "Milestone should be unlocked when goal is reached"
+        );
 
         // Verify both donor records
         let donor1_record = CampaignContract::get_donor_record(env.clone(), donor1.clone())
@@ -196,7 +200,8 @@ fn test_lifecycle_end_and_refund_eligibility() {
             assets.clone(),
             milestones.clone(),
             0,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Donate
         let donor = Address::generate(&env);
@@ -266,7 +271,8 @@ fn test_lifecycle_multi_milestone_unlock() {
             assets.clone(),
             milestones.clone(),
             0,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Use different donor addresses to avoid auth-frame conflicts in tests
         let donor1 = Address::generate(&env);
@@ -278,29 +284,53 @@ fn test_lifecycle_multi_milestone_unlock() {
         CampaignContract::donate(env.clone(), donor1.clone(), 500, AssetInfo::Native);
 
         let milestone_0 = get_milestone(&env, 0).unwrap();
-        assert_eq!(milestone_0.status, MilestoneStatus::Locked, "Milestone 0 should remain locked at 500 raised");
+        assert_eq!(
+            milestone_0.status,
+            MilestoneStatus::Locked,
+            "Milestone 0 should remain locked at 500 raised"
+        );
 
         // Second donation: 600 — total 1100, milestone 0 should unlock
         CampaignContract::donate(env.clone(), donor2.clone(), 600, AssetInfo::Native);
 
         let milestone_0 = get_milestone(&env, 0).unwrap();
-        assert_eq!(milestone_0.status, MilestoneStatus::Unlocked, "Milestone 0 should unlock at 1100 raised");
+        assert_eq!(
+            milestone_0.status,
+            MilestoneStatus::Unlocked,
+            "Milestone 0 should unlock at 1100 raised"
+        );
         let milestone_1 = get_milestone(&env, 1).unwrap();
-        assert_eq!(milestone_1.status, MilestoneStatus::Locked, "Milestone 1 should remain locked");
+        assert_eq!(
+            milestone_1.status,
+            MilestoneStatus::Locked,
+            "Milestone 1 should remain locked"
+        );
 
         // Third donation: 1000 — total 2100, milestone 1 should unlock
         CampaignContract::donate(env.clone(), donor3.clone(), 1000, AssetInfo::Native);
 
         let milestone_1 = get_milestone(&env, 1).unwrap();
-        assert_eq!(milestone_1.status, MilestoneStatus::Unlocked, "Milestone 1 should unlock at 2100 raised");
+        assert_eq!(
+            milestone_1.status,
+            MilestoneStatus::Unlocked,
+            "Milestone 1 should unlock at 2100 raised"
+        );
         let milestone_2 = get_milestone(&env, 2).unwrap();
-        assert_eq!(milestone_2.status, MilestoneStatus::Locked, "Milestone 2 should remain locked");
+        assert_eq!(
+            milestone_2.status,
+            MilestoneStatus::Locked,
+            "Milestone 2 should remain locked"
+        );
 
         // Fourth donation: 900 — total 3000, milestone 2 should unlock
         CampaignContract::donate(env.clone(), donor4.clone(), 900, AssetInfo::Native);
 
         let milestone_2 = get_milestone(&env, 2).unwrap();
-        assert_eq!(milestone_2.status, MilestoneStatus::Unlocked, "Milestone 2 should unlock at 3000 raised");
+        assert_eq!(
+            milestone_2.status,
+            MilestoneStatus::Unlocked,
+            "Milestone 2 should unlock at 3000 raised"
+        );
 
         // Campaign should be GoalReached
         let campaign = get_campaign(&env).unwrap();
@@ -378,7 +408,8 @@ fn test_campaign_analytics_report_and_summary() {
             assets.clone(),
             milestones.clone(),
             0,
-        ).unwrap();
+        )
+        .unwrap();
 
         let initial = CampaignContract::get_campaign_report(env.clone()).unwrap();
         assert_eq!(initial.creator, creator);
@@ -456,7 +487,8 @@ fn test_donate_below_minimum_panics_assert() {
             assets.clone(),
             milestones.clone(),
             100, // min donation is 100
-        ).unwrap();
+        )
+        .unwrap();
 
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor.clone(), 50, AssetInfo::Native);
