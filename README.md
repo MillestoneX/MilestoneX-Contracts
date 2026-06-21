@@ -470,11 +470,24 @@ git push origin feature/add-donation-flow
 
 Open a Pull Request from your fork back to the main branch.
 
+For the full contributor checklist, local command reference, and security scan
+expectations, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Security Scans
 
 This project uses `cargo-audit` and `cargo-deny` to maintain high security standards and license compliance.
 
 ### Local Scans
+
+Install the scan tools before running the Makefile targets:
+
+```bash
+cargo install cargo-audit --locked
+cargo install cargo-deny --locked
+```
+
+If either tool is missing, `make audit` and `make deny` fail early with the
+matching install command instead of a generic `cargo: Command not found` error.
 
 You can run the security scans locally using the following commands:
 
