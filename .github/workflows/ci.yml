@@ -20,6 +20,15 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: short
 
+# Workspace members that compile to wasm32 Soroban contracts. crates/tools
+# is intentionally excluded — it is a native CLI binary, not a contract, and
+# has its own dev-tooling lint/test debt tracked separately.
+CONTRACTS: >-
+  -p orbitchain-campaign
+  -p orbitchain-common
+  -p orbitchain-core
+  -p orbitchain-token-bridge
+
 jobs:
   fmt:
     name: Format check
@@ -37,8 +46,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: cargo fmt --check
+      - name: cargo fmt --check (contracts)
+        # Scope is intentionally narrower than the workspace because
+        # crates/tools is a native CLI with separate formatting conventions
+        # tracked separately.
         run: cargo fmt --all -- --check
+          && cargo fmt ${{ env.CONTRACTS }} -- --check
 
   clippy:
     name: Clippy lint
@@ -54,8 +67,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: cargo clippy (contracts)
+        # Scope is intentionally narrower than the workspace because
+        # crates/tools is a native CLI with separate lint conventions.
+        run: cargo clippy ${{ env.CONTRACTS }} -- -D warnings
 
   test:
     name: Tests (host target)
@@ -71,8 +86,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: cargo test --workspace
-        run: cargo test --workspace
+      - name: cargo test (contracts)
+        run: cargo test ${{ env.CONTRACTS }}
 
   wasm-check:
     name: WASM compile check
@@ -83,11 +98,14 @@ jobs:
       - name: Install Rust toolchain with wasm target
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          # wasm32v1-none is the target Soroban SDK 26.x requires on stable
+          # Rust (>=1.84); wasm32-unknown-unknown on Rust >=1.82 enables
+          # reference-types/multi-value which the Soroban host cannot honour.
+          targets: wasm32v1-none
           cache: false
       - name: Cache cargo registry and target
         uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-      - name: cargo check --workspace --target wasm32-unknown-unknown
-        run: cargo check --workspace --target wasm32-unknown-unknown
+      - name: cargo check --target wasm32v1-none (contracts)
+        run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none

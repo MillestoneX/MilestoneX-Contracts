@@ -1,7 +1,7 @@
 // src/storage.rs
 
-use soroban_sdk::{Address, Env, panic_with_error};
 use crate::types::{CampaignData, DataKey, DonorRecord, Error, MilestoneData};
+use soroban_sdk::{panic_with_error, Address, Env};
 
 // ─── TTL Constants ────────────────────────────────────────────────────────────
 //
@@ -32,9 +32,11 @@ pub const TEMPORARY_BUMP_THRESHOLD: u32 = 17_280;
 #[inline]
 fn bump_persistent(env: &Env, key: &DataKey) {
     if env.storage().persistent().has(key) {
-        env.storage()
-            .persistent()
-            .extend_ttl(key, PERSISTENT_BUMP_THRESHOLD, PERSISTENT_BUMP_AMOUNT);
+        env.storage().persistent().extend_ttl(
+            key,
+            PERSISTENT_BUMP_THRESHOLD,
+            PERSISTENT_BUMP_AMOUNT,
+        );
     }
 }
 
@@ -45,9 +47,7 @@ fn bump_persistent(env: &Env, key: &DataKey) {
 /// (handled automatically by the host — we surface it as `StorageWriteError`
 /// so callers get a typed error instead of a host trap).
 pub fn set_campaign(env: &Env, data: &CampaignData) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::CampaignData, data);
+    env.storage().persistent().set(&DataKey::CampaignData, data);
     bump_persistent(env, &DataKey::CampaignData);
 }
 
@@ -55,10 +55,7 @@ pub fn set_campaign(env: &Env, data: &CampaignData) {
 /// Returns `None` only before the contract is initialised.
 #[must_use]
 pub fn get_campaign(env: &Env) -> Option<CampaignData> {
-    let value = env
-        .storage()
-        .persistent()
-        .get(&DataKey::CampaignData)?;
+    let value = env.storage().persistent().get(&DataKey::CampaignData)?;
     bump_persistent(env, &DataKey::CampaignData);
     Some(value)
 }
@@ -93,8 +90,7 @@ pub fn get_milestone(env: &Env, index: u32) -> Option<MilestoneData> {
 /// Same as `get_milestone` but panics with `MilestoneNotFound`.
 #[must_use]
 pub fn get_milestone_or_panic(env: &Env, index: u32) -> MilestoneData {
-    get_milestone(env, index)
-        .unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound))
+    get_milestone(env, index).unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound))
 }
 
 // ─── Donors ───────────────────────────────────────────────────────────────────
@@ -139,11 +135,7 @@ pub fn get_donor_or_default(env: &Env, donor: &Address) -> DonorRecord {
 /// Returns 0 if no donations in that asset yet.
 pub fn get_donor_asset_donation(env: &Env, donor: &Address, asset: &Address) -> i128 {
     let key = DataKey::DonorAssetDonation(donor.clone(), asset.clone());
-    let value: i128 = env
-        .storage()
-        .persistent()
-        .get(&key)
-        .unwrap_or(0);
+    let value: i128 = env.storage().persistent().get(&key).unwrap_or(0);
     bump_persistent(env, &key);
     value
 }
@@ -152,15 +144,12 @@ pub fn get_donor_asset_donation(env: &Env, donor: &Address, asset: &Address) -> 
 /// Panics if the addition would overflow.
 pub fn increment_donor_asset_donation(env: &Env, donor: &Address, asset: &Address, amount: i128) {
     let key = DataKey::DonorAssetDonation(donor.clone(), asset.clone());
-    let current: i128 = env
-        .storage()
-        .persistent()
-        .get(&key)
-        .unwrap_or(0);
-    
-    let new_amount = current.checked_add(amount)
+    let current: i128 = env.storage().persistent().get(&key).unwrap_or(0);
+
+    let new_amount = current
+        .checked_add(amount)
         .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
-    
+
     env.storage().persistent().set(&key, &new_amount);
     bump_persistent(env, &key);
 }
@@ -286,11 +275,7 @@ pub fn storage_increment_release_count(env: &Env) -> u64 {
 /// Load the raised amount for a specific token address.
 pub fn storage_get_asset_raised(env: &Env, token: &Address) -> i128 {
     let key = DataKey::AssetRaised(token.clone());
-    let value: i128 = env
-        .storage()
-        .persistent()
-        .get(&key)
-        .unwrap_or(0);
+    let value: i128 = env.storage().persistent().get(&key).unwrap_or(0);
     bump_persistent(env, &key);
     value
 }
@@ -374,11 +359,7 @@ pub fn release_lock(env: &Env) {
 /// Returns `false` if the flag has never been set.
 pub fn is_frozen(env: &Env) -> bool {
     let key = DataKey::Frozen;
-    let frozen: bool = env
-        .storage()
-        .persistent()
-        .get(&key)
-        .unwrap_or(false);
+    let frozen: bool = env.storage().persistent().get(&key).unwrap_or(false);
     bump_persistent(env, &key);
     frozen
 }
