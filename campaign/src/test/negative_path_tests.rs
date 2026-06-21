@@ -938,3 +938,79 @@ fn test_cancel_then_refund_eligible() {
         assert!(eligible);
     });
 }
+
+// ─── Freeze invariant regression tests ───────────────────────────────────────
+
+#[test]
+#[should_panic]
+fn test_end_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::end_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::cancel_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_extend_deadline_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+    });
+}
+
+#[test]
+fn test_end_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::end_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Ended);
+    });
+}
+
+#[test]
+fn test_cancel_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::cancel_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Cancelled);
+    });
+}
+
+#[test]
+fn test_extend_deadline_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(campaign.end_time, new_end);
+    });
+}
