@@ -8,15 +8,13 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, Env, Vec, String, BytesN};
+use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
-use crate::types::{
-    CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset,
-};
+use super::with_contract;
 use crate::storage::{
     get_campaign, get_milestone, set_campaign, set_milestone, storage_get_total_raised,
 };
-use super::with_contract;
+use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
 
 /// Base timestamp: 1 year in seconds, same convention as other test files.
 const BASE: u64 = 86400 * 365;
@@ -100,32 +98,25 @@ fn invariant_last_milestone_target_equals_goal() {
         let last_milestone = get_milestone(&env, last_index).unwrap();
 
         assert_eq!(
-            last_milestone.target_amount,
-            campaign.goal_amount,
+            last_milestone.target_amount, campaign.goal_amount,
             "INVARIANT VIOLATED: last milestone target ({}) != goal_amount ({})",
-            last_milestone.target_amount,
-            campaign.goal_amount,
+            last_milestone.target_amount, campaign.goal_amount,
         );
     });
 
     // Case B: three milestones — only the last must equal goal
     with_contract(&env, || {
         let goal: i128 = 3000;
-        setup_campaign_with_milestones(
-            &env, goal, 0, CampaignStatus::Active,
-            &[1000, 2000, 3000],
-        );
+        setup_campaign_with_milestones(&env, goal, 0, CampaignStatus::Active, &[1000, 2000, 3000]);
 
         let campaign = get_campaign(&env).unwrap();
         let last_index = campaign.milestone_count - 1;
         let last_milestone = get_milestone(&env, last_index).unwrap();
 
         assert_eq!(
-            last_milestone.target_amount,
-            campaign.goal_amount,
+            last_milestone.target_amount, campaign.goal_amount,
             "INVARIANT VIOLATED: last milestone target ({}) != goal_amount ({})",
-            last_milestone.target_amount,
-            campaign.goal_amount,
+            last_milestone.target_amount, campaign.goal_amount,
         );
     });
 }
@@ -182,8 +173,8 @@ fn invariant_total_donations_match_raised() {
     env.ledger().set_timestamp(BASE);
 
     with_contract(&env, || {
-        use crate::types::{AssetInfo, DonorRecord};
         use crate::storage::{set_donor, storage_set_total_raised};
+        use crate::types::{AssetInfo, DonorRecord};
 
         let goal: i128 = 3000;
         setup_campaign_with_milestones(&env, goal, 0, CampaignStatus::Active, &[1000, 2000, 3000]);
@@ -202,15 +193,15 @@ fn invariant_total_donations_match_raised() {
         let asset_info = AssetInfo::Stellar(Address::generate(&env));
 
         let mut record_a = DonorRecord::new_for(donor_a.clone(), asset_info.clone());
-        record_a.apply_donation(amount_a, BASE, 1, asset_info.clone());
+        record_a.apply_donation(&env, amount_a, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_a, &record_a);
 
         let mut record_b = DonorRecord::new_for(donor_b.clone(), asset_info.clone());
-        record_b.apply_donation(amount_b, BASE, 1, asset_info.clone());
+        record_b.apply_donation(&env, amount_b, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_b, &record_b);
 
         let mut record_c = DonorRecord::new_for(donor_c.clone(), asset_info.clone());
-        record_c.apply_donation(amount_c, BASE, 1, asset_info.clone());
+        record_c.apply_donation(&env, amount_c, BASE, 1, asset_info.clone());
         set_donor(&env, &donor_c, &record_c);
 
         // Update campaign raised_amount and global total_raised to match
@@ -255,10 +246,7 @@ fn invariant_no_released_milestones_while_active() {
 
     with_contract(&env, || {
         let goal: i128 = 3000;
-        setup_campaign_with_milestones(
-            &env, goal, 0, CampaignStatus::Active,
-            &[1000, 2000, 3000],
-        );
+        setup_campaign_with_milestones(&env, goal, 0, CampaignStatus::Active, &[1000, 2000, 3000]);
 
         // Simulate donations that cross each milestone threshold
         // by updating raised_amount and unlocking milestones as donate() would
@@ -295,7 +283,9 @@ fn invariant_no_released_milestones_while_active() {
                     MilestoneStatus::Released,
                     "INVARIANT VIOLATED: milestone {} is Released while campaign is {:?} \
                      after donations only (raised={})",
-                    i, campaign.status, raised,
+                    i,
+                    campaign.status,
+                    raised,
                 );
             }
         }
@@ -314,10 +304,7 @@ fn invariant_milestone_targets_strictly_ascending() {
     env.ledger().set_timestamp(BASE);
 
     with_contract(&env, || {
-        setup_campaign_with_milestones(
-            &env, 3000, 0, CampaignStatus::Active,
-            &[1000, 2000, 3000],
-        );
+        setup_campaign_with_milestones(&env, 3000, 0, CampaignStatus::Active, &[1000, 2000, 3000]);
 
         let campaign = get_campaign(&env).unwrap();
         let mut prev_target: i128 = 0;
@@ -329,7 +316,9 @@ fn invariant_milestone_targets_strictly_ascending() {
                 ms.target_amount > prev_target,
                 "INVARIANT VIOLATED: milestone {} target ({}) is not greater than \
                  previous target ({})",
-                i, ms.target_amount, prev_target,
+                i,
+                ms.target_amount,
+                prev_target,
             );
 
             prev_target = ms.target_amount;
@@ -338,11 +327,9 @@ fn invariant_milestone_targets_strictly_ascending() {
         // Final check: last milestone equals goal
         let last = get_milestone(&env, campaign.milestone_count - 1).unwrap();
         assert_eq!(
-            last.target_amount,
-            campaign.goal_amount,
+            last.target_amount, campaign.goal_amount,
             "INVARIANT VIOLATED: last milestone target ({}) != goal_amount ({})",
-            last.target_amount,
-            campaign.goal_amount,
+            last.target_amount, campaign.goal_amount,
         );
     });
 }

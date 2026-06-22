@@ -47,17 +47,8 @@ fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        println!("OrbitChain CLI - Soroban Contract Management Tool");
-        println!("Usage: orbitchain-cli <command>");
-        println!();
-        println!("Commands:");
-        println!("  config     - Manage configuration");
-        println!("  network    - Show network configuration");
-        println!("  deploy     - Deploy contract");
-        println!("  invoke     - Invoke contract method");
-        println!("  account    - Manage Stellar accounts");
-        println!("  signing    - Build transaction signing requests");
-        println!("  response   - Handle signed transaction responses");
+        print_cli_banner();
+        print_available_commands();
         return Ok(());
     }
 
@@ -75,10 +66,47 @@ fn main() -> Result<()> {
         "signing" => handle_signing(&args[2..]),
         "response" => handle_response(&args[2..]),
         _ => {
-            println!("Unknown command: {}", args[1]);
+            println!("❌ Unknown command: {}", args[1]);
+            println!();
+            print_available_commands();
+            println!("🔗 See docs/deployment.md (Known Limitations) for unimplemented commands.");
+            println!("   This gap is tracked in https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
             Ok(())
         }
     }
+}
+
+/// Print the OrbitChain CLI banner shown when no arguments are supplied,
+/// or after an unknown command is requested.
+fn print_cli_banner() {
+    println!("OrbitChain CLI — Soroban Contract Management Tool");
+    println!("Usage: orbitchain-cli <command> [args...]");
+}
+
+/// Print every command currently wired into the dispatcher, grouped by area.
+/// Stub commands are flagged so users do not assume they are production-ready.
+///
+/// Keep this in sync with `crates/tools/src/main.rs` `match args[1]` arms and
+/// `docs/deployment.md` "Known Limitations / CLI Status".
+fn print_available_commands() {
+    println!("Implemented commands:");
+    println!("  config                - Show resolved environment and network configuration");
+    println!("  network               - Show active Soroban network (RPC, Horizon, passphrase)");
+    println!("  vault                 - Show SecureVault status and security best practices");
+    println!("  toggle <testnet|mainnet> - Switch the active network");
+    println!("  asset <cmd>           - Asset issuing (config|generate|check|trustline|issue)");
+    println!("  keymanager <cmd>      - Key encryption and encrypted vault lifecycle");
+    println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
+    println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
+    println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!();
+    println!("Stubs (no-op placeholders, do not rely on in production):");
+    println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
+    println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
+    println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
+    println!();
+    println!("Run `orbitchain-cli <command>` (no subcommand) for usage details.");
+    println!("Full status of every command mentioned in docs: docs/deployment.md.");
 }
 
 fn handle_config() -> Result<()> {
@@ -143,22 +171,51 @@ fn handle_network() -> Result<()> {
 }
 
 fn handle_deploy() -> Result<()> {
-    println!("🚀 Deploy contract functionality coming soon...");
+    println!("🚀 The 'deploy' command is a stub and is NOT yet implemented in this binary.");
+    println!("💡 For real deployments use one of:");
+    println!("     make deploy-testnet                  # uses scripts/deploy.sh + stellar contract deploy");
+    println!("     bash scripts/deploy.sh testnet       # ditto, direct script invocation");
+    println!("        (loads $SOROBAN_ADMIN_SECRET_KEY from .env, deploys the WASM at");
+    println!("         target/wasm32v1-none/release/orbitchain_core.wasm to testnet)");
+    println!("     stellar contract deploy \\");
+    println!("         --wasm target/wasm32v1-none/release/orbitchain_core.wasm \\");
+    println!("         --source \"$SOROBAN_ADMIN_SECRET_KEY\" --network testnet      # native fallback");
+    println!("⚠️  Note: the deploy scripts currently ship the legacy `orbitchain-core`");
+    println!("    binary even though `orbitchain-campaign` is canonical (see README).");
+    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
     Ok(())
 }
 
 fn handle_invoke(args: &[String]) -> Result<()> {
+    println!("🔄 The 'invoke' command is a stub and is NOT yet implemented in this binary.");
     if args.is_empty() {
-        println!("Usage: orbitchain-cli invoke <method>");
-        return Ok(());
+        println!("💡 Invoke natively with:");
+        println!("     stellar contract invoke \\");
+        println!("         --id <CONTRACT_ID> \\");
+        println!("         --source <KEY> \\");
+        println!("         --network testnet \\");
+        println!("         -- <method> [args...]");
+    } else {
+        println!("💡 You asked to invoke '{}'. Run it natively for now:", args[0]);
+        println!("     stellar contract invoke \\");
+        println!("         --id <CONTRACT_ID> \\");
+        println!("         --source <KEY> \\");
+        println!("         --network testnet \\");
+        println!("         -- {} [args...]", args[0]);
     }
-
-    println!("🔄 Invoke method '{}' functionality coming soon...", args[0]);
+    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
     Ok(())
 }
 
 fn handle_account() -> Result<()> {
-    println!("👤 Account management functionality coming soon...");
+    println!("👤 The 'account' command is a stub and is NOT yet implemented in this binary.");
+    println!("💡 The account/keypair lifecycle is implemented under the `keypair` namespace:");
+    println!("     orbitchain-cli keypair generate-master      # create a master keypair");
+    println!("     orbitchain-cli keypair generate-distribution <issuing_public_key>");
+    println!("     orbitchain-cli keypair fund <account_public_key> <amount_xlm>");
+    println!("     orbitchain-cli keypair show-master|show-distribution");
+    println!("     orbitchain-cli keypair validate-master|validate-distribution");
+    println!("🔗 Tracked in: https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37");
     Ok(())
 }
 

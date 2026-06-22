@@ -8,6 +8,11 @@
 //! be used for new campaign development.
 
 #![no_std]
+// `Events::publish` and a few call sites on `Ledger` are marked deprecated in
+// soroban-sdk 26.x in favour of `#[contractevent]` and the new ledger APIs.
+// Migrating every call site here is tracked as a follow-up issue; suppressing
+// the warning keeps CI clean without changing the published event topics.
+#![allow(deprecated)]
 
 pub mod contract;
 pub mod event;
@@ -19,15 +24,33 @@ pub mod storage;
 pub mod types;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus, PlatformSummary, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, storage_get_donation_count, storage_increment_donation_count, storage_get_unique_donor_count, storage_increment_unique_donor_count, storage_get_release_count, storage_increment_asset_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use storage::{
+    acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
+    increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
+    set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
+    storage_get_unique_donor_count, storage_increment_asset_raised,
+    storage_increment_donation_count, storage_increment_unique_donor_count,
+    storage_set_total_raised,
+};
+
+use types::{
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
+    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    PlatformSummary, StellarAsset,
+};
 
 pub const VERSION: u32 = 1;
 
 /// Refund window duration: 30 days in seconds.
 /// Refunds are only permitted within this window after campaign end or cancellation.
 pub const REFUND_WINDOW: u64 = 30 * 24 * 60 * 60;
+
+/// Maximum amount of ledger time a campaign deadline may be extended.
+///
+/// Capping extensions at ten years keeps deadline arithmetic meaningful for
+/// views, refund windows, milestone release metadata, and downstream reports.
+pub const MAX_DEADLINE_GAP_SECONDS: u64 = 10 * 365 * 24 * 60 * 60;
 
 #[contract]
 pub struct CampaignContract;
@@ -79,7 +102,7 @@ impl CampaignContract {
 
         validate_assets(&env, &accepted_assets)?;
 
-        let milestone_count = milestones.len() as u32;
+        let milestone_count = milestones.len();
         if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {
             panic_with_error(&env, Error::InvalidMilestoneCount);
         }
@@ -112,7 +135,7 @@ impl CampaignContract {
                 creator,
                 goal_amount,
                 end_time,
-                asset_count: accepted_assets.len() as u32,
+                asset_count: accepted_assets.len(),
                 milestone_count,
                 created_at_ledger: env.ledger().sequence(),
             },
@@ -188,26 +211,21 @@ impl CampaignContract {
         storage_increment_asset_raised(&env, &asset_address, amount);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
+        let _donor_record =
+            get_donor(&env, &donor).unwrap_or(DonorRecord::new_for(donor.clone(), asset.clone()));
         // Update donor record
         let existing_donor = get_donor(&env, &donor);
         let is_new_donor = existing_donor.is_none();
-        let mut donor_record = existing_donor.unwrap_or(DonorRecord {
-            donor: donor.clone(),
-            total_donated: 0,
-            asset: asset.clone(),
-            last_donation_time: 0,
-            last_donation_ledger: 0,
-            donation_count: 0,
-            refund_claimed: false,
-        });
-        donor_record.total_donated = donor_record
-            .total_donated
-            .checked_add(amount)
-            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
-        donor_record.asset = asset.clone();
-        donor_record.last_donation_time = env.ledger().timestamp();
-        donor_record.last_donation_ledger = env.ledger().sequence();
-        donor_record.donation_count = donor_record.donation_count.saturating_add(1);
+        let mut donor_record =
+            existing_donor.unwrap_or_else(|| DonorRecord::new_for(donor.clone(), asset.clone()));
+
+        donor_record.apply_donation(
+            &env,
+            amount,
+            env.ledger().timestamp(),
+            env.ledger().sequence(),
+            asset.clone(),
+        );
         set_donor(&env, &donor, &donor_record);
         storage_increment_donation_count(&env);
         if is_new_donor {
@@ -349,10 +367,7 @@ impl CampaignContract {
         };
 
         let refund_eligibility = check_refund_eligibility(&env, &campaign, &donor_record);
-        match refund_eligibility {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        refund_eligibility.is_ok()
     }
 
     /// Claim a refund for a donation.
@@ -382,6 +397,9 @@ impl CampaignContract {
 
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+
+        let _donor_record =
+            get_donor(&env, &donor).unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
 
         let mut donor_record =
             get_donor(&env, &donor).unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
@@ -419,6 +437,7 @@ impl CampaignContract {
                         // Calculate pro-rata refund: (donor_amount * refund_numerator) / refund_denominator
                         // PR #21: anti-dust floor via calculate_refund_amount helper.
                         let refund_amount = calculate_refund_amount(
+                            &env,
                             donor_asset_amount,
                             refund_numerator,
                             refund_denominator,
@@ -483,6 +502,8 @@ impl CampaignContract {
     ///
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Only callable while campaign is Active or GoalReached.
+    /// New deadline must be in the future and no more than ten years from the
+    /// current ledger timestamp.
     pub fn extend_deadline(env: Env, new_end_time: u64) {
         contract::extend_deadline(&env, new_end_time);
     }
@@ -606,6 +627,7 @@ impl CampaignContract {
 /// Reads the creator address from campaign storage and calls `require_auth()`.
 /// Panics with `Error::Unauthorized` if the campaign is not initialized;
 /// Soroban's auth framework panics if the invoker is not the creator.
+#[allow(dead_code)]
 fn require_creator(env: &Env) {
     let campaign = get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
     campaign.creator.require_auth();
@@ -640,7 +662,7 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
 
 fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     for asset in assets.iter() {
-        if asset.asset_code.len() == 0 {
+        if asset.asset_code.is_empty() {
             panic_with_error(env, Error::InvalidAssetCode);
         }
     }
@@ -709,7 +731,7 @@ fn check_refund_eligibility(
         CampaignStatus::Ended => {
             // Refunds only if NO milestones have been released
             for i in 0..campaign.milestone_count {
-                if let Some(milestone) = get_milestone(&env, i) {
+                if let Some(milestone) = get_milestone(env, i) {
                     if milestone.status == MilestoneStatus::Released {
                         return Err(Error::RefundNotPermitted);
                     }
@@ -734,7 +756,9 @@ fn check_refund_eligibility(
 }
 
 /// Validates campaign status transitions; panics if invalid.
-#[must_use]
+///
+/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
+/// attribute is needed (clippy `double_must_use`).
 pub fn validate_campaign_transition(
     env: &Env,
     current_status: &CampaignStatus,
@@ -757,7 +781,9 @@ pub fn validate_campaign_transition(
 }
 
 /// Validates milestone status transitions; panics if invalid.
-#[must_use]
+///
+/// Returns `Result<(), Error>` which is already `#[must_use]`, so no extra
+/// attribute is needed (clippy `double_must_use`).
 pub fn validate_milestone_transition(
     env: &Env,
     current_status: &MilestoneStatus,
@@ -784,10 +810,10 @@ mod test {
     pub mod claim_refund_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
+    pub mod invariant_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
-    pub mod invariant_tests;
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.
@@ -801,20 +827,23 @@ mod test {
     }
 }
 
-fn calculate_refund_amount(
+pub(crate) fn calculate_refund_amount(
+    env: &Env,
     donor_asset_amount: i128,
     refund_numerator: i128,
     refund_denominator: i128,
 ) -> i128 {
-    debug_assert!(refund_denominator > 0, "refund_denominator must be nonzero");
+    if refund_denominator <= 0 {
+        panic_with_error(env, Error::Overflow);
+    }
 
     let numerator = donor_asset_amount
         .checked_mul(refund_numerator)
-        .expect("overflow in refund numerator");
+        .unwrap_or_else(|| panic_with_error(env, Error::Overflow));
 
     let refund = numerator / refund_denominator;
 
-    // Anti-dust floor: if the donor is entitled to something nonzero but
+    // PR #21: anti-dust floor — if the donor is entitled to something nonzero but
     // floor division rounded it all the way down to 0, bump to 1 unit
     // rather than letting them lose their entire refund to rounding.
     if refund == 0 && numerator > 0 {

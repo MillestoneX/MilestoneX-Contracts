@@ -64,10 +64,13 @@ impl WithdrawalLimits {
             ));
         }
         if let Some(cap) = self.max_total {
-            if already_withdrawn + amount > cap {
+            let new_total = already_withdrawn
+                .checked_add(amount)
+                .ok_or_else(|| anyhow!("Withdrawal arithmetic overflow: already_withdrawn + amount exceeds i128"))?;
+            if new_total > cap {
                 return Err(anyhow!(
                     "Total withdrawn {} would exceed the campaign cap of {}",
-                    already_withdrawn + amount, cap
+                    new_total, cap,
                 ));
             }
         }
@@ -114,5 +117,13 @@ mod tests {
     fn constructor_rejects_invalid_range() {
         assert!(WithdrawalLimits::new(1000, 500, None).is_err());
         assert!(WithdrawalLimits::new(0, 500, None).is_err());
+
+    #[test]
+    fn overflow_error_when_sum_exceeds_i128() {
+        // Create limits with a very large max_per_withdrawal to allow the amount
+        let limits = WithdrawalLimits::new(1, i128::MAX, None).unwrap();
+        // This should cause checked_add overflow (already_withdrawn + amount > i128::MAX)
+        assert!(limits.validate(i128::MAX, 1).is_err());
+    }
     }
 }

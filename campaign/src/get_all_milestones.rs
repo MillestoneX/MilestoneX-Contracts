@@ -1,9 +1,8 @@
 use soroban_sdk::{panic_with_error, Env, Vec};
 
-use crate::get_milestone;
-use crate::storage::get_campaign;
+use crate::storage::{get_campaign, get_milestone};
 use crate::types::Error;
-use crate::views::{self, MilestoneView};
+use crate::views::{find_next_pending_index, MilestoneView};
 
 /// Issue #200 – Returns enriched views for ALL milestones in the campaign.
 ///
@@ -14,12 +13,24 @@ use crate::views::{self, MilestoneView};
 /// - `Error::NotInitialized` — contract not yet initialised.
 #[must_use]
 pub fn get_all_milestones_view(env: &Env) -> Vec<MilestoneView> {
-    let campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+
+    let next_pending = find_next_pending_index(env);
 
     let mut result: Vec<MilestoneView> = Vec::new(env);
     for i in 0..campaign.milestone_count {
-        result.push_back(views::get_milestone_by_index(env, i));
+        let data = get_milestone(env, i)
+            .unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound));
+        let pending_release = data.pending_release();
+        let is_fully_released = data.is_fully_released();
+        let is_next_pending = next_pending == i;
+        result.push_back(MilestoneView {
+            data,
+            pending_release,
+            is_fully_released,
+            is_next_pending,
+        });
     }
     result
 }
@@ -31,8 +42,8 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
-    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
     use crate::test::with_contract;
+    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
 
     fn make_env() -> Env {
         Env::default()
@@ -111,8 +122,14 @@ mod tests {
             seed_milestone(&env, 2, MilestoneStatus::Locked);
             let result = get_all_milestones_view(&env);
             assert_eq!(result.len(), 3);
-            assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Released);
-            assert_eq!(result.get(1).unwrap().data.status, MilestoneStatus::Unlocked);
+            assert_eq!(
+                result.get(0).unwrap().data.status,
+                MilestoneStatus::Released
+            );
+            assert_eq!(
+                result.get(1).unwrap().data.status,
+                MilestoneStatus::Unlocked
+            );
             assert_eq!(result.get(2).unwrap().data.status, MilestoneStatus::Locked);
         });
     }

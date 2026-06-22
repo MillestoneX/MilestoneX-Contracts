@@ -9,12 +9,15 @@ use core::ops::Add;
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{Address, Env, Vec, log, vec};
+use soroban_sdk::{log, vec, Address, Env, Vec};
 
-use crate::types::{AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus, StellarAsset};
-use crate::storage::{set_campaign, set_donor, set_milestone};
-use crate::{CampaignContract, CampaignContractClient};
 use super::with_contract;
+use crate::storage::{set_campaign, set_donor, set_milestone};
+use crate::types::{
+    AssetInfo, CampaignData, CampaignStatus, DataKey, DonorRecord, MilestoneData, MilestoneStatus,
+    StellarAsset,
+};
+use crate::{CampaignContract, CampaignContractClient};
 
 /// Base ledger timestamp (1 year in seconds) used so we can safely subtract
 /// from it to simulate "past" end_times without underflow.
@@ -38,7 +41,11 @@ fn create_test_campaign(
     let campaign = CampaignData {
         creator: creator.clone(),
         goal_amount,
-        raised_amount: if matches!(status, CampaignStatus::Cancelled | CampaignStatus::Ended) { 1000 } else { 0 },
+        raised_amount: if matches!(status, CampaignStatus::Cancelled | CampaignStatus::Ended) {
+            1000
+        } else {
+            0
+        },
         end_time,
         status,
         accepted_assets: {
@@ -60,16 +67,15 @@ fn create_test_campaign(
 }
 
 /// Creates a milestone with the given index and status.
-fn create_test_milestone(
-    env: &Env,
-    index: u32,
-    target_amount: i128,
-    status: MilestoneStatus,
-) {
+fn create_test_milestone(env: &Env, index: u32, target_amount: i128, status: MilestoneStatus) {
     let milestone = crate::types::MilestoneData {
         index,
         target_amount,
-        released_amount: if status == MilestoneStatus::Released { target_amount } else { 0 },
+        released_amount: if status == MilestoneStatus::Released {
+            target_amount
+        } else {
+            0
+        },
         description_hash: soroban_sdk::BytesN::from_array(env, &[0u8; 32]),
         status,
         released_at: None,
@@ -81,12 +87,7 @@ fn create_test_milestone(
 }
 
 /// Creates a donor record for testing.
-fn create_test_donor(
-    env: &Env,
-    donor: &Address,
-    total_donated: i128,
-    refund_claimed: bool,
-) {
+fn create_test_donor(env: &Env, donor: &Address, total_donated: i128, refund_claimed: bool) {
     let donor_record = DonorRecord {
         donor: donor.clone(),
         total_donated,
@@ -97,6 +98,137 @@ fn create_test_donor(
         refund_claimed,
     };
     set_donor(env, donor, &donor_record);
+}
+
+// ─── calculate_refund_amount typed-error tests (issue #33) ───────────────────
+
+/// Zero refund denominator must panic with typed `Error::Overflow`, not a WASM trap.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_zero_denominator() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, 100, 50, 0);
+    });
+}
+
+/// Negative refund denominator must also panic with typed `Error::Overflow`.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_negative_denominator() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, 100, 50, -1);
+    });
+}
+
+/// Integer overflow in refund numerator must panic with typed `Error::Overflow`.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_overflow() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, i128::MAX, 2, 1);
+    });
+}
+
+/// PR #21 anti-dust floor: tiny pro-rata share rounds up to 1 unit.
+#[test]
+fn test_calculate_refund_amount_anti_dust_floor() {
+    let env = make_env();
+    with_contract(&env, || {
+        // (1 * 1) / 1000 = 0 in floor division, but numerator > 0 → bump to 1
+        let refund = crate::calculate_refund_amount(&env, 1, 1, 1000);
+        assert_eq!(refund, 1);
+    });
+}
+
+/// `claim_refund` must surface typed `Error::Overflow` when refund math overflows.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_claim_refund_refund_amount_overflow() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let token_issuer = Address::generate(&env);
+        let end_time = env.ledger().timestamp() + 1000;
+        let campaign = CampaignData {
+            creator: Address::generate(&env),
+            goal_amount: 1000,
+            raised_amount: 2,
+            end_time,
+            status: CampaignStatus::Cancelled,
+            accepted_assets: {
+                let mut assets = soroban_sdk::Vec::new(&env);
+                assets.push_back(StellarAsset {
+                    asset_code: soroban_sdk::String::from_str(&env, "TST"),
+                    issuer: Some(token_issuer.clone()),
+                });
+                assets
+            },
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: 0,
+            created_at_time: 0,
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        env.storage().persistent().set(
+            &DataKey::DonorAssetDonation(donor.clone(), token_issuer.clone()),
+            &i128::MAX,
+        );
+
+        CampaignContract::claim_refund(env.clone(), donor);
+    });
+}
+
+/// `claim_refund` must surface typed `Error::Overflow` when raised_amount is zero.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_claim_refund_zero_denominator() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let token_issuer = Address::generate(&env);
+        let end_time = env.ledger().timestamp() + 1000;
+        let campaign = CampaignData {
+            creator: Address::generate(&env),
+            goal_amount: 1000,
+            raised_amount: 0,
+            end_time,
+            status: CampaignStatus::Cancelled,
+            accepted_assets: {
+                let mut assets = soroban_sdk::Vec::new(&env);
+                assets.push_back(StellarAsset {
+                    asset_code: soroban_sdk::String::from_str(&env, "TST"),
+                    issuer: Some(token_issuer.clone()),
+                });
+                assets
+            },
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: 0,
+            created_at_time: 0,
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        env.storage().persistent().set(
+            &DataKey::DonorAssetDonation(donor.clone(), token_issuer.clone()),
+            &100i128,
+        );
+
+        CampaignContract::claim_refund(env.clone(), donor);
+    });
 }
 
 // ─── Error path tests ────────────────────────────────────────────────────────
@@ -220,7 +352,10 @@ fn test_claim_refund_exactly_at_window_boundary() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(eligible, "Should be refund-eligible at exactly 30-day boundary");
+        assert!(
+            eligible,
+            "Should be refund-eligible at exactly 30-day boundary"
+        );
     });
 }
 
@@ -235,7 +370,10 @@ fn test_claim_refund_one_second_past_window() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Should NOT be refund-eligible past 30-day window");
+        assert!(
+            !eligible,
+            "Should NOT be refund-eligible past 30-day window"
+        );
     });
 }
 
@@ -265,7 +403,10 @@ fn test_claim_refund_ended_no_milestones_eligibility() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(eligible, "Ended campaign with no released milestones should allow refunds");
+        assert!(
+            eligible,
+            "Ended campaign with no released milestones should allow refunds"
+        );
     });
 }
 
@@ -281,10 +422,12 @@ fn test_claim_refund_ended_with_released_milestone_eligibility() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Ended campaign with released milestones should NOT allow refunds");
+        assert!(
+            !eligible,
+            "Ended campaign with released milestones should NOT allow refunds"
+        );
     });
 }
-
 
 fn setup<'a>() -> (Env, CampaignContractClient<'a>, Address) {
     let env = Env::default();
@@ -302,11 +445,15 @@ fn create_test_milestone_data(
     index: u32,
     target_amount: i128,
     status: MilestoneStatus,
-) -> Vec<MilestoneData>{
+) -> Vec<MilestoneData> {
     let milestone = crate::types::MilestoneData {
         index,
         target_amount,
-        released_amount: if status == MilestoneStatus::Released { target_amount } else { 0 },
+        released_amount: if status == MilestoneStatus::Released {
+            target_amount
+        } else {
+            0
+        },
         description_hash: soroban_sdk::BytesN::from_array(env, &[0u8; 32]),
         status,
         released_at: None,
@@ -351,13 +498,23 @@ fn test_claim_refund_ended_donor_100() {
     let min_donation_amount = 0;
     let contract_address = &client.address;
 
-    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+    client.initialize(
+        &creator,
+        &goal_amount,
+        &end_time,
+        &accepted_assets,
+        &milestones,
+        &min_donation_amount,
+    );
 
     client.donate(&donor, &100, &AssetInfo::Stellar(token_address.clone()));
     token.transfer(&donor, contract_address, &100);
-    client.donate(&donor2, &999_900, &AssetInfo::Stellar(token_address.clone()));
+    client.donate(
+        &donor2,
+        &999_900,
+        &AssetInfo::Stellar(token_address.clone()),
+    );
     token.transfer(&donor2, contract_address, &999_900);
-
 
     let recipient = Address::generate(&env);
     client.release_milestone(&0, &recipient);
@@ -375,7 +532,7 @@ fn test_claim_refund_ended_donor_100() {
 
     let donor2_balance = token.balance(&donor2);
     assert_eq!(donor2_balance, 1099);
-    
+
     let contract_balance = token.balance(&contract_address);
     assert_eq!(contract_balance, 0);
 }
@@ -404,13 +561,19 @@ fn test_claim_refund_ended_donor_1() {
     let min_donation_amount = 0;
     let contract_address = &client.address;
 
-    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+    client.initialize(
+        &creator,
+        &goal_amount,
+        &end_time,
+        &accepted_assets,
+        &milestones,
+        &min_donation_amount,
+    );
 
     client.donate(&donor, &1, &AssetInfo::Stellar(token_address.clone()));
     token.transfer(&donor, contract_address, &1);
     client.donate(&donor2, &9999, &AssetInfo::Stellar(token_address.clone()));
     token.transfer(&donor2, contract_address, &9999);
-
 
     let recipient = Address::generate(&env);
     client.release_milestone(&0, &recipient);
@@ -455,11 +618,17 @@ fn test_claim_refund_ended_full_refund() {
     let min_donation_amount = 0;
     let contract_address = &client.address;
 
-    client.initialize(&creator, &goal_amount, &end_time, &accepted_assets, &milestones, &min_donation_amount);
+    client.initialize(
+        &creator,
+        &goal_amount,
+        &end_time,
+        &accepted_assets,
+        &milestones,
+        &min_donation_amount,
+    );
 
     client.donate(&donor, &1500, &AssetInfo::Stellar(token_address.clone()));
     token.transfer(&donor, contract_address, &1500);
-
 
     let recipient = Address::generate(&env);
     client.release_milestone(&0, &recipient);

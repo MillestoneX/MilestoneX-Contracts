@@ -20,13 +20,13 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, Env, Vec, String, BytesN};
 use soroban_sdk::token::StellarAssetClient;
+use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
-use crate::types::{CampaignStatus, StellarAsset, MilestoneData, MilestoneStatus, CampaignData};
-use crate::storage::{get_milestone, set_campaign, set_milestone};
-use crate::CampaignContractClient;
 use super::with_contract;
+use crate::storage::{get_milestone, set_campaign, set_milestone};
+use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
+use crate::CampaignContractClient;
 
 /// Base ledger timestamp (1 year in seconds).
 const BASE: u64 = 86400 * 365;
@@ -83,12 +83,7 @@ fn mint_tokens_to_contract(env: &Env) {
 }
 
 /// Creates a milestone with the given index, target, and status.
-fn create_test_milestone(
-    env: &Env,
-    index: u32,
-    target_amount: i128,
-    status: MilestoneStatus,
-) {
+fn create_test_milestone(env: &Env, index: u32, target_amount: i128, status: MilestoneStatus) {
     let milestone = MilestoneData {
         index,
         target_amount,
@@ -203,8 +198,7 @@ fn test_valid_release_sets_released_amount() {
         crate::release_milestone::release_milestone(&env, 0, recipient);
         let milestone = get_milestone(&env, 0).expect("Milestone should exist");
         assert_eq!(
-            milestone.released_amount,
-            milestone.target_amount,
+            milestone.released_amount, milestone.target_amount,
             "Released amount should equal target amount after release"
         );
     });

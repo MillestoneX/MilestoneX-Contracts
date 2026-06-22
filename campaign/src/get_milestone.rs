@@ -58,8 +58,8 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
-    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
     use crate::test::with_contract;
+    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
