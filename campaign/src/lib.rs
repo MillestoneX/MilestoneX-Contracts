@@ -431,6 +431,7 @@ impl CampaignContract {
                         // Calculate pro-rata refund: (donor_amount * refund_numerator) / refund_denominator
                         // PR #21: anti-dust floor via calculate_refund_amount helper.
                         let refund_amount = calculate_refund_amount(
+                            &env,
                             donor_asset_amount,
                             refund_numerator,
                             refund_denominator,
@@ -809,20 +810,23 @@ mod test {
     }
 }
 
-fn calculate_refund_amount(
+pub(crate) fn calculate_refund_amount(
+    env: &Env,
     donor_asset_amount: i128,
     refund_numerator: i128,
     refund_denominator: i128,
 ) -> i128 {
-    debug_assert!(refund_denominator > 0, "refund_denominator must be nonzero");
+    if refund_denominator <= 0 {
+        panic_with_error(env, Error::Overflow);
+    }
 
     let numerator = donor_asset_amount
         .checked_mul(refund_numerator)
-        .expect("overflow in refund numerator");
+        .unwrap_or_else(|| panic_with_error(env, Error::Overflow));
 
     let refund = numerator / refund_denominator;
 
-    // Anti-dust floor: if the donor is entitled to something nonzero but
+    // PR #21: anti-dust floor — if the donor is entitled to something nonzero but
     // floor division rounded it all the way down to 0, bump to 1 unit
     // rather than letting them lose their entire refund to rounding.
     if refund == 0 && numerator > 0 {
