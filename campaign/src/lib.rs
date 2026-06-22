@@ -28,16 +28,12 @@ use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
 use storage::{
     acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
     increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
-    set_milestone, storage_get_total_raised, storage_set_total_raised,
-};
-use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse,
-    DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset,
     set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
     storage_get_unique_donor_count, storage_increment_asset_raised,
     storage_increment_donation_count, storage_increment_unique_donor_count,
     storage_set_total_raised,
 };
+
 use types::{
     AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
     CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
