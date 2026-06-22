@@ -15,9 +15,16 @@ pub mod storage;
 pub mod types;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse, DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use storage::{
+    acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
+    increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
+    set_milestone, storage_get_total_raised, storage_set_total_raised,
+};
+use types::{
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignStatus, CampaignStatusResponse,
+    DonorRecord, Error, MilestoneData, MilestoneStatus, StellarAsset,
+};
 
 pub const VERSION: u32 = 1;
 
@@ -139,8 +146,8 @@ impl CampaignContract {
             panic_with_error(&env, Error::ContractFrozen);
         }
 
-        let mut campaign: CampaignData = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let mut campaign: CampaignData =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         // Issue #194 – status check: only Active or GoalReached campaigns accept donations
         match campaign.status {
@@ -148,7 +155,9 @@ impl CampaignContract {
             _ => panic_with_error(&env, Error::CampaignNotActive),
         }
 
-        if amount <= 0 || (campaign.min_donation_amount > 0 && amount < campaign.min_donation_amount) {
+        if amount <= 0
+            || (campaign.min_donation_amount > 0 && amount < campaign.min_donation_amount)
+        {
             panic_with_error(&env, Error::DonationTooSmall);
         }
 
@@ -181,24 +190,15 @@ impl CampaignContract {
         let asset_address = get_token_address_for_asset(&env, &asset, &campaign);
         increment_donor_asset_donation(&env, &donor, &asset_address, amount);
 
-        // Update donor record
-        let mut donor_record = get_donor(&env, &donor).unwrap_or(DonorRecord {
-            donor: donor.clone(),
-            total_donated: 0,
-            asset: asset.clone(),
-            last_donation_time: 0,
-            last_donation_ledger: 0,
-            donation_count: 0,
-            refund_claimed: false,
-        });
-        donor_record.total_donated = donor_record
-            .total_donated
-            .checked_add(amount)
-            .unwrap_or_else(|| panic_with_error(&env, Error::Overflow));
-        donor_record.asset = asset.clone();
-        donor_record.last_donation_time = env.ledger().timestamp();
-        donor_record.last_donation_ledger = env.ledger().sequence();
-        donor_record.donation_count = donor_record.donation_count.saturating_add(1);
+        let mut donor_record =
+            get_donor(&env, &donor).unwrap_or(DonorRecord::new_for(donor.clone(), asset.clone()));
+        donor_record.apply_donation(
+            &env,
+            amount,
+            env.ledger().timestamp(),
+            env.ledger().sequence(),
+            asset.clone(),
+        );
         set_donor(&env, &donor, &donor_record);
 
         // Issue #195 – milestone unlock check
@@ -210,14 +210,26 @@ impl CampaignContract {
                     milestone.status = MilestoneStatus::Unlocked;
                     set_milestone(&env, i, &milestone);
                     // Emit milestone_unlocked event
-                    event::milestone_unlocked(&env, i, milestone.target_amount, campaign.raised_amount);
+                    event::milestone_unlocked(
+                        &env,
+                        i,
+                        milestone.target_amount,
+                        campaign.raised_amount,
+                    );
                 }
             }
         }
 
         // Emit donation_received event
         let asset_code = resolve_asset_code(&env, &asset, &campaign);
-        event::donation_received(&env, &donor, amount, asset_code, campaign.raised_amount, env.ledger().timestamp());
+        event::donation_received(
+            &env,
+            &donor,
+            amount,
+            asset_code,
+            campaign.raised_amount,
+            env.ledger().timestamp(),
+        );
 
         // Issue #242 – Release reentrancy lock
         release_lock(&env);
@@ -327,11 +339,11 @@ impl CampaignContract {
             panic_with_error(&env, Error::ContractFrozen);
         }
 
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
-        let mut donor_record = get_donor(&env, &donor)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
+        let mut donor_record =
+            get_donor(&env, &donor).unwrap_or_else(|| panic_with_error(&env, Error::NoDonorRecord));
 
         // Eligibility Check 1: Campaign must be terminal
         if !campaign.status.is_terminal() {
@@ -466,8 +478,8 @@ impl CampaignContract {
     pub fn release_milestone(env: Env, milestone_index: u32, recipient: Address) {
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
         campaign.creator.require_auth();
         release_milestone::release_milestone(&env, milestone_index, recipient);
     }
@@ -480,8 +492,8 @@ impl CampaignContract {
     pub fn release_milestone_multi_asset(env: Env, milestone_index: u32, recipient: Address) {
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
         campaign.creator.require_auth();
         multi_asset_release::release_milestone_multi_asset(&env, milestone_index, recipient);
     }
@@ -507,13 +519,14 @@ impl CampaignContract {
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
 
         // Actually deploy the new WASM hash to the contract
-        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+        env.deployer()
+            .update_current_contract_wasm(new_wasm_hash.clone());
 
         let timestamp = env.ledger().timestamp();
         event::contract_upgraded(&env, &campaign.creator, new_wasm_hash, timestamp);
@@ -528,8 +541,8 @@ impl CampaignContract {
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
     pub fn freeze(env: Env) {
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
 
@@ -547,8 +560,8 @@ impl CampaignContract {
     /// - `Error::Unauthorized` if not called by the creator
     /// - `Error::NotInitialized` if campaign not yet initialized
     pub fn unfreeze(env: Env) {
-        let campaign = get_campaign(&env)
-            .unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
+        let campaign =
+            get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
 
@@ -565,18 +578,13 @@ impl CampaignContract {
 /// Panics with `Error::Unauthorized` if the campaign is not initialized;
 /// Soroban's auth framework panics if the invoker is not the creator.
 fn require_creator(env: &Env) {
-    let campaign =
-        get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
+    let campaign = get_campaign(env).unwrap_or_else(|| panic_with_error(env, Error::Unauthorized));
     campaign.creator.require_auth();
 }
 
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
-fn get_token_address_for_asset(
-    env: &Env,
-    asset: &AssetInfo,
-    campaign: &CampaignData,
-) -> Address {
+fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
     match asset {
         AssetInfo::Stellar(addr) => {
             let accepted = campaign
@@ -640,14 +648,12 @@ fn validate_milestones(
 fn resolve_asset_code(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> String {
     match asset {
         AssetInfo::Native => String::from_str(env, "XLM"),
-        AssetInfo::Stellar(addr) => {
-            campaign
-                .accepted_assets
-                .iter()
-                .find(|a| a.issuer == Some(addr.clone()))
-                .map(|a| a.asset_code.clone())
-                .unwrap_or_else(|| String::from_str(env, "UNKNOWN"))
-        }
+        AssetInfo::Stellar(addr) => campaign
+            .accepted_assets
+            .iter()
+            .find(|a| a.issuer == Some(addr.clone()))
+            .map(|a| a.asset_code.clone())
+            .unwrap_or_else(|| String::from_str(env, "UNKNOWN")),
     }
 }
 
