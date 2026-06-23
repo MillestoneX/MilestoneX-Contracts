@@ -6,9 +6,7 @@
 //! verifiable from the public key alone.
 
 use anyhow::{anyhow, Context, Result};
-use ed25519_dalek::{
-    Keypair, PublicKey, SecretKey, Signature, Signer, Verifier, VerifyingKey,
-};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
@@ -309,14 +307,20 @@ impl SigningRequest {
         crate::key_manager::KeyManager::validate_secret_key(secret_key)?;
 
         let seed_bytes = strkey_decode(secret_key, "secret")?;
-        let secret = SecretKey::from_bytes(&seed_bytes)
+        let signing_key = SigningKey::from_bytes(&seed_bytes)
             .map_err(|e| anyhow!("Invalid Stellar secret seed for Ed25519 keypair: {}", e))?;
-        let public = PublicKey::from(&secret);
-        let keypair = Keypair { secret, public };
+        let verifying_key = signing_key.verifying_key();
 
-        let signature: Signature = keypair.sign(self.transaction_xdr.as_bytes());
+        // `SigningKey::sign` (from the `Signer` trait) is RFC 8032
+        // deterministic Ed25519 — no RNG is required and the same
+        // (key, msg) always yields the same signature, matching the
+        // property callers previously relied on.
+        let signature: Signature = signing_key.sign(self.transaction_xdr.as_bytes());
         let sig_hex = hex::encode(signature.to_bytes());
-        let signer_public_key = strkey_encode(public.as_bytes(), ED25519_PUBLIC_VERSION_BYTE);
+        let signer_public_key = strkey_encode(
+            &verifying_key.to_bytes(),
+            ED25519_PUBLIC_VERSION_BYTE,
+        );
 
         Ok(ServerSignedTransaction {
             request_id: self.id.clone(),
