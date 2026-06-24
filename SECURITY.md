@@ -1,5 +1,11 @@
 # Security Policy
 
+## Key Derivation Function (KDF) Migration (Issue #XX)
+
+As of version X.X.X, the vault key derivation has been upgraded from SHA-256 to **Argon2id** with per-instance salts. This prevents dictionary and rainbow-table attacks on operator passwords.
+
+**For users:** When you next load or create a vault with a password, the new KDF will be used automatically. Existing SHA-256-derived vaults must be re-encrypted by creating a new vault and migrating keys.
+
 ## Reporting a Vulnerability
 
 OrbitChain-Contracts contains Soroban smart contracts handling crowdfunding and fund management. Security vulnerabilities can have serious financial consequences. Please report them responsibly.

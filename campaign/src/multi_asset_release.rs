@@ -112,8 +112,9 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
     milestone.status = MilestoneStatus::Released;
     set_milestone(env, milestone_index, &milestone);
 
-    // ── 7. Execute proportional transfers ───────────────────────────────────
     let timestamp = env.ledger().timestamp();
+
+    // ── 7. Execute proportional transfers ───────────────────────────────────
     let mut total_released: i128 = 0;
 
     for asset in campaign.accepted_assets.iter() {
@@ -121,9 +122,11 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
             Some(addr) => addr.clone(),
             None => {
                 // Native asset or asset without issuer — skip gracefully
-                env.events().publish(
-                    (symbol_short!("ms_skip"), symbol_short!("no_issuer")),
-                    (milestone_index, asset.asset_code.clone()),
+                event::milestone_release_skipped(
+                    env,
+                    milestone_index,
+                    asset.asset_code.clone(),
+                    symbol_short!("no_issuer"),
                 );
                 continue;
             }
@@ -186,6 +189,15 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
             .checked_add(clamped_release)
             .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
     }
+
+    // Emit summary event after all per-asset releases
+    event::milestone_release_completed(
+        env,
+        milestone_index,
+        total_released,
+        campaign.accepted_assets.len() as u32,
+        timestamp,
+    );
 
     // ── 8. Update global total-raised bookkeeping ────────────────────────────
     let new_total_raised = total_raised.checked_sub(total_released).unwrap_or(0).max(0);

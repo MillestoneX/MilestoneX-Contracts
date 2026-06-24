@@ -20,6 +20,8 @@ pub struct EncryptedVault {
     encrypted_keys: HashMap<String, String>,
     /// Public keys (safe to store unencrypted)
     public_keys: HashMap<String, String>,
+    /// KDF salt (persisted alongside vault)
+    salt: Option<[u8; 16]>,
 }
 
 impl EncryptedVault {
@@ -30,6 +32,7 @@ impl EncryptedVault {
             key_manager: None,
             encrypted_keys: HashMap::new(),
             public_keys: HashMap::new(),
+            salt: None,
         }
     }
 
@@ -37,10 +40,12 @@ impl EncryptedVault {
     #[must_use]
     pub fn with_password(password: &str) -> Result<Self> {
         let key_manager = KeyManager::from_password(password)?;
+        let salt = *key_manager.get_salt();
         Ok(Self {
             key_manager: Some(key_manager),
             encrypted_keys: HashMap::new(),
             public_keys: HashMap::new(),
+            salt: Some(salt),
         })
     }
 
@@ -48,10 +53,12 @@ impl EncryptedVault {
     #[must_use]
     pub fn with_hex_key(hex_key: &str) -> Result<Self> {
         let key_manager = KeyManager::from_hex_key(hex_key)?;
+        let salt = *key_manager.get_salt();
         Ok(Self {
             key_manager: Some(key_manager),
             encrypted_keys: HashMap::new(),
             public_keys: HashMap::new(),
+            salt: Some(salt),
         })
     }
 
@@ -151,6 +158,11 @@ impl EncryptedVault {
         let mut content = String::from("# Encrypted Vault Configuration\n");
         content.push_str("# WARNING: Keep this file secure!\n\n");
 
+        // Save KDF salt (required for decryption)
+        if let Some(salt) = &self.salt {
+            content.push_str(&format!("VAULT_SALT={}\n\n", hex::encode(salt)));
+        }
+
         // Save public keys
         content.push_str("# Public Keys (unencrypted)\n");
         for (name, key) in &self.public_keys {
@@ -180,10 +192,34 @@ impl EncryptedVault {
     /// Load vault from encrypted file
     pub fn load_from_file(path: &str, password: &str) -> Result<Self> {
         let content = fs::read_to_string(path).context("Failed to read vault file")?;
-        let mut vault = Self::with_password(password)?;
+        let mut salt: Option<[u8; 16]> = None;
 
         for line in content.lines() {
-            if line.starts_with('#') || line.trim().is_empty() {
+            if line.starts_with("VAULT_SALT=") {
+                let salt_hex = line.trim_start_matches("VAULT_SALT=");
+                let salt_bytes = hex::decode(salt_hex).context("Failed to decode salt")?;
+                if salt_bytes.len() != 16 {
+                    anyhow::bail!("Invalid salt length: expected 16 bytes, got {}", salt_bytes.len());
+                }
+                let mut s = [0u8; 16];
+                s.copy_from_slice(&salt_bytes);
+                salt = Some(s);
+                break;
+            }
+        }
+
+        let salt = salt.ok_or_else(|| anyhow::anyhow!("No VAULT_SALT found in vault file. Ensure file was created with current version."))?;
+        let key_manager = KeyManager::from_password_with_salt(password, &salt)?;
+
+        let mut vault = Self {
+            key_manager: Some(key_manager),
+            encrypted_keys: HashMap::new(),
+            public_keys: HashMap::new(),
+            salt: Some(salt),
+        };
+
+        for line in content.lines() {
+            if line.starts_with('#') || line.trim().is_empty() || line.starts_with("VAULT_SALT=") {
                 continue;
             }
 

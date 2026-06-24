@@ -3,8 +3,8 @@ use aes_gcm::{
     Aes256Gcm, Nonce,
 };
 use anyhow::{Context, Result};
+use argon2::{Algorithm, Argon2, Params, Version};
 use rand::Rng;
-use sha2::{Digest, Sha256};
 use std::fmt;
 use zeroize::Zeroize;
 
@@ -37,27 +37,42 @@ impl Drop for EncryptedKey {
 #[derive(Debug)]
 pub struct KeyManager {
     master_key: [u8; 32],
+    salt: [u8; 16],
 }
 
 impl Drop for KeyManager {
     fn drop(&mut self) {
         self.master_key.zeroize();
+        self.salt.zeroize();
     }
 }
 
 impl KeyManager {
     /// Initialize KeyManager from a master password/key.
-    /// Derives a 256-bit key using SHA-256.
+    /// Derives a 256-bit key using Argon2id with a random salt.
     #[must_use]
     pub fn from_password(password: &str) -> Result<Self> {
-        let mut hasher = Sha256::new();
-        hasher.update(password.as_bytes());
-        let key_bytes = hasher.finalize();
+        let mut rng = rand::thread_rng();
+        let mut salt = [0u8; 16];
+        rng.fill(&mut salt);
+        Self::from_password_with_salt(password, &salt)
+    }
 
+    /// Initialize KeyManager from password with a specific salt (for loading).
+    #[must_use]
+    pub fn from_password_with_salt(password: &str, salt: &[u8; 16]) -> Result<Self> {
+        let params = Params::new(19_456, 2, 1, Some(32))
+            .map_err(|e| anyhow::anyhow!("Failed to create Argon2 parameters: {}", e))?;
+        let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         let mut master_key = [0u8; 32];
-        master_key.copy_from_slice(&key_bytes);
+        argon
+            .hash_password_into(password.as_bytes(), salt, &mut master_key)
+            .map_err(|e| anyhow::anyhow!("Argon2 key derivation failed: {}", e))?;
 
-        Ok(Self { master_key })
+        Ok(Self {
+            master_key,
+            salt: *salt,
+        })
     }
 
     /// Initialize KeyManager from a 32-byte hex string.
@@ -68,10 +83,14 @@ impl KeyManager {
             anyhow::bail!("Key must be exactly 32 bytes, got {}", key_bytes.len());
         }
 
+        let mut rng = rand::thread_rng();
+        let mut salt = [0u8; 16];
+        rng.fill(&mut salt);
+
         let mut master_key = [0u8; 32];
         master_key.copy_from_slice(&key_bytes);
 
-        Ok(Self { master_key })
+        Ok(Self { master_key, salt })
     }
 
     /// Encrypt a private key (secret key) using AES-256-GCM
@@ -108,6 +127,11 @@ impl KeyManager {
             .map_err(|e| anyhow::anyhow!("Decryption failed (wrong key or corrupted data): {}", e))?;
 
         String::from_utf8(plaintext).context("Decrypted key is not valid UTF-8")
+    }
+
+    /// Get the salt used for key derivation
+    pub fn get_salt(&self) -> &[u8; 16] {
+        &self.salt
     }
 
     /// Export encrypted key as hex string for storage
@@ -200,12 +224,27 @@ mod tests {
         let secret_key = "SBZXVMIRWXL5VZVKXWV2FGKYTQ5VV5VRNJYQVZKYWW3XYVYP3IXGKDU";
 
         let encrypted = manager1.encrypt_key(secret_key)?;
+        let salt1 = manager1.get_salt();
 
-        let manager2 = KeyManager::from_password("password2")?;
+        // Manager2 must use same salt to test password difference
+        let manager2 = KeyManager::from_password_with_salt("password2", salt1)?;
         let result = manager2.decrypt_key(&encrypted);
 
         // Should fail due to wrong password
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_password_with_same_salt_derives_same_key() -> Result<()> {
+        let salt = [42u8; 16];
+        let password = "test_password";
+
+        let manager1 = KeyManager::from_password_with_salt(password, &salt)?;
+        let manager2 = KeyManager::from_password_with_salt(password, &salt)?;
+
+        // Same password and salt should derive identical keys
+        assert_eq!(manager1.master_key, manager2.master_key);
         Ok(())
     }
 

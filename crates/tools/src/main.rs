@@ -310,8 +310,8 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
         println!("Usage: orbitchain-cli keymanager <command>");
         println!();
         println!("Commands:");
-        println!("  encrypt <password> <secret_key>  - Encrypt a secret key");
-        println!("  decrypt <password> <encrypted>   - Decrypt an encrypted key");
+        println!("  encrypt <password> <secret_key>                        - Encrypt a secret key");
+        println!("  decrypt <password> <salt_hex> <encrypted_hex>         - Decrypt an encrypted key");
         println!("  init-vault <password>            - Initialize encrypted vault");
         println!("  vault-status                     - Show vault status");
         println!("  vault-save <path>                - Save vault to file");
@@ -332,24 +332,32 @@ fn handle_keymanager(args: &[String]) -> Result<()> {
             KeyManager::validate_secret_key(secret_key)?;
             let manager = KeyManager::from_password(password)?;
             let encrypted_hex = manager.export_encrypted(secret_key)?;
+            let salt_hex = hex::encode(manager.get_salt());
             
             println!("✅ Key encrypted successfully");
             println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            println!("Encrypted Key (hex format):");
-            println!("{}", encrypted_hex);
+            println!("SALT={}", salt_hex);
+            println!("ENCRYPTED={}", encrypted_hex);
             println!();
-            println!("💡 Store this encrypted key safely and use VAULT_MASTER_PASSWORD to decrypt");
+            println!("💡 To decrypt: orbitchain-cli keymanager decrypt \"<password>\" \"{}\" \"{}\"", salt_hex, encrypted_hex);
         }
         "decrypt" => {
-            if args.len() < 3 {
-                println!("Usage: orbitchain-cli keymanager decrypt <password> <encrypted_hex>");
+            if args.len() < 4 {
+                println!("Usage: orbitchain-cli keymanager decrypt <password> <salt_hex> <encrypted_hex>");
                 return Ok(());
             }
             
             let password = &args[1];
-            let encrypted_hex = &args[2];
+            let salt_hex = &args[2];
+            let encrypted_hex = &args[3];
             
-            let manager = KeyManager::from_password(password)?;
+            let salt_bytes = hex::decode(salt_hex).context("Failed to decode salt hex")?;
+            if salt_bytes.len() != 16 {
+                anyhow::bail!("Invalid salt length: expected 16 bytes, got {}", salt_bytes.len());
+            }
+            let mut salt = [0u8; 16];
+            salt.copy_from_slice(&salt_bytes);
+            let manager = KeyManager::from_password_with_salt(password, &salt)?;
             let encrypted = manager.import_encrypted(encrypted_hex)?;
             let secret_key = manager.decrypt_key(&encrypted)?;
             
