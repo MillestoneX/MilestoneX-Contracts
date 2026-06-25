@@ -5,12 +5,12 @@
 #![cfg(test)]
 
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
-use soroban_sdk::{Address, Env, Vec, String, BytesN};
+use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
-use crate::types::{CampaignStatus, CampaignData, StellarAsset, MilestoneStatus, MilestoneData};
-use crate::storage::set_campaign;
-use crate::CampaignContract;
 use super::with_contract;
+use crate::storage::set_campaign;
+use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
+use crate::CampaignContract;
 
 /// Base ledger timestamp (1 year in seconds) so we can safely subtract
 /// to simulate "past" end_times without underflow.

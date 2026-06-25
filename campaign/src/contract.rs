@@ -3,11 +3,11 @@
 //! These are wired into the contract impl in `lib.rs` as methods on
 //! `CampaignContract`.
 
-use soroban_sdk::{panic_with_error, Address, Env};
 use crate::event;
 use crate::storage::{get_campaign, set_campaign};
 use crate::types::{CampaignStatus, Error};
 use crate::validate_campaign_transition;
+use soroban_sdk::{panic_with_error, Address, Env};
 
 /// Issue #212 – End the campaign early (before deadline).
 ///
@@ -19,8 +19,8 @@ use crate::validate_campaign_transition;
 /// - `Error::Unauthorized` if caller is not the creator
 /// - `Error::InvalidCampaignTransition` if campaign is already Ended or Cancelled
 pub fn end_campaign(env: &Env) {
-    let mut campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let mut campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
 
@@ -44,8 +44,8 @@ pub fn end_campaign(env: &Env) {
 /// - `Error::Unauthorized` if caller is not the creator
 /// - `Error::InvalidCampaignTransition` if campaign is already Cancelled
 pub fn cancel_campaign(env: &Env) {
-    let mut campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let mut campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
 
@@ -70,8 +70,8 @@ pub fn cancel_campaign(env: &Env) {
 /// - `Error::InvalidEndTime` if `new_end_time <= current ledger timestamp`
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
 pub fn extend_deadline(env: &Env, new_end_time: u64) {
-    let mut campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let mut campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
 
@@ -103,9 +103,9 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
 #[must_use]
 pub fn get_campaign_status(env: &Env) -> crate::types::CampaignStatusResponse {
     use crate::types::CampaignStatusResponse;
-    
-    let campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     let now = env.ledger().timestamp();
     let days_remaining = if now < campaign.end_time {

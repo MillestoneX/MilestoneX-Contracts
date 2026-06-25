@@ -14,8 +14,8 @@ use crate::views::{self, MilestoneView};
 /// - `Error::NotInitialized` — contract not yet initialised.
 #[must_use]
 pub fn get_all_milestones_view(env: &Env) -> Vec<MilestoneView> {
-    let campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     let mut result: Vec<MilestoneView> = Vec::new(env);
     for i in 0..campaign.milestone_count {
@@ -31,8 +31,8 @@ mod tests {
     use super::*;
     use soroban_sdk::{testutils::Address as _, Address, Env};
 
-    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
     use crate::test::with_contract;
+    use crate::types::{CampaignData, CampaignStatus, DataKey, MilestoneStatus};
 
     fn make_env() -> Env {
         Env::default()
@@ -111,8 +111,14 @@ mod tests {
             seed_milestone(&env, 2, MilestoneStatus::Locked);
             let result = get_all_milestones_view(&env);
             assert_eq!(result.len(), 3);
-            assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Released);
-            assert_eq!(result.get(1).unwrap().data.status, MilestoneStatus::Unlocked);
+            assert_eq!(
+                result.get(0).unwrap().data.status,
+                MilestoneStatus::Released
+            );
+            assert_eq!(
+                result.get(1).unwrap().data.status,
+                MilestoneStatus::Unlocked
+            );
             assert_eq!(result.get(2).unwrap().data.status, MilestoneStatus::Locked);
         });
     }

@@ -19,9 +19,20 @@ pub mod storage;
 pub mod types;
 pub mod views;
 
-use soroban_sdk::{contract, contractimpl, Address, Env, String, Vec, BytesN};
-use types::{CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus, PlatformSummary, StellarAsset, AssetInfo};
-use storage::{get_campaign, set_campaign, get_milestone, set_milestone, get_donor, set_donor, storage_get_total_raised, storage_set_total_raised, storage_get_donation_count, storage_increment_donation_count, storage_get_unique_donor_count, storage_increment_unique_donor_count, storage_get_release_count, storage_increment_asset_raised, increment_donor_asset_donation, get_donor_asset_donation, is_frozen, set_frozen, acquire_lock, release_lock};
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use storage::{
+    acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
+    increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
+    set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
+    storage_get_unique_donor_count, storage_increment_asset_raised,
+    storage_increment_donation_count, storage_increment_unique_donor_count,
+    storage_set_total_raised,
+};
+use types::{
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
+    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    PlatformSummary, StellarAsset,
+};
 
 pub const VERSION: u32 = 1;
 
@@ -784,10 +795,10 @@ mod test {
     pub mod claim_refund_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
+    pub mod invariant_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
-    pub mod invariant_tests;
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.

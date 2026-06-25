@@ -7,7 +7,7 @@
 //! All discriminants are stable — never renumber existing variants.
 
 #![no_std]
-use soroban_sdk::{contracttype, contracterror};
+use soroban_sdk::{contracterror, contracttype};
 
 #[contracttype]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

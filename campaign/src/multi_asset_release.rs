@@ -1,11 +1,11 @@
-use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env, Vec};
 use crate::event;
-use crate::types::{Error, MilestoneStatus, StellarAsset};
 use crate::storage::{
     acquire_lock, get_campaign, get_milestone, release_lock, set_milestone,
-    storage_get_asset_raised, storage_get_total_raised,
-    storage_increment_release_count, storage_set_total_raised, storage_set_asset_raised,
+    storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
+    storage_set_asset_raised, storage_set_total_raised,
 };
+use crate::types::{Error, MilestoneStatus, StellarAsset};
+use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env, Vec};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -63,18 +63,13 @@ fn compute_asset_release(
 ///   contract can never release more than it actually holds.
 /// - Dust amounts below MIN_TRANSFER_AMOUNT are skipped rather than
 ///   causing the whole release to fail.
-pub fn release_milestone_multi_asset(
-    env: &Env,
-    milestone_index: u32,
-    recipient: Address,
-) {
+pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient: Address) {
     // Issue #242 – Reentrancy protection: acquire lock
     acquire_lock(env);
 
     // ── 1. Load campaign ────────────────────────────────────────────────────
-    let campaign = get_campaign(env).unwrap_or_else(|| {
-        panic_with_error!(env, Error::NotInitialized)
-    });
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     // ── 3. Validate recipient ────────────────────────────────────────────────
     if recipient == env.current_contract_address() {
@@ -82,9 +77,8 @@ pub fn release_milestone_multi_asset(
     }
 
     // ── 4. Load and validate milestone ──────────────────────────────────────
-    let mut milestone = get_milestone(env, milestone_index).unwrap_or_else(|| {
-        panic_with_error!(env, Error::MilestoneNotFound)
-    });
+    let mut milestone = get_milestone(env, milestone_index)
+        .unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound));
 
     if milestone.status != MilestoneStatus::Unlocked {
         panic_with_error!(env, Error::InvalidMilestoneTransition);
@@ -140,17 +134,14 @@ pub fn release_milestone_multi_asset(
         // Retrieve the per-asset raised amount from storage for proportional math
         let asset_raised = storage_get_asset_raised(env, &token_address);
 
-        let asset_release = match compute_asset_release(
-            asset_raised,
-            milestone_release,
-            total_raised,
-        ) {
-            Some(amount) => amount,
-            None => {
-                // Nothing to release for this asset (dust or zero balance)
-                continue;
-            }
-        };
+        let asset_release =
+            match compute_asset_release(asset_raised, milestone_release, total_raised) {
+                Some(amount) => amount,
+                None => {
+                    // Nothing to release for this asset (dust or zero balance)
+                    continue;
+                }
+            };
 
         // Issue #244 – Verify contract balance is sufficient
         if contract_balance < asset_release {
@@ -266,10 +257,14 @@ mod tests {
     #[test]
     #[should_panic(expected = "HostError")]
     fn test_release_underflow_panics() {
-        use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
-        use crate::storage::{set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised};
-        use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+        use crate::storage::{
+            set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised,
+        };
+        use crate::types::{
+            CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset,
+        };
         use soroban_sdk::token::StellarAssetClient;
+        use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
         let env = Env::default();
         env.mock_all_auths();

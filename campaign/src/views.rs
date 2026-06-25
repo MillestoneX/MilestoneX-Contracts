@@ -33,8 +33,8 @@ pub struct MilestoneView {
 /// Returns `milestone_count` if all milestones are released.
 #[must_use]
 pub fn find_next_pending_index(env: &Env) -> u32 {
-    let campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     for i in 0..campaign.milestone_count {
         if let Some(milestone) = get_milestone(env, i) {
@@ -53,8 +53,8 @@ pub fn find_next_pending_index(env: &Env) -> u32 {
 /// - `Error::MilestoneNotFound` — `index` ≥ `milestone_count` or missing storage.
 #[must_use]
 pub fn get_milestone_by_index(env: &Env, index: u32) -> MilestoneView {
-    let campaign = get_campaign(env)
-        .unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     if index >= campaign.milestone_count {
         panic_with_error!(env, Error::MilestoneNotFound);
