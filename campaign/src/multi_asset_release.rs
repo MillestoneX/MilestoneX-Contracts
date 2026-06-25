@@ -184,9 +184,9 @@ pub fn release_milestone_multi_asset(
         // Update per-asset accounting
         let new_asset_raised = asset_raised
             .checked_sub(clamped_release)
-            .unwrap_or_else(|| panic_with_error!(env, Error::LedgerUnderflow));
+            .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
         if new_asset_raised < 0 {
-            panic_with_error!(env, Error::LedgerUnderflow);
+            panic_with_error!(env, Error::Overflow);
         }
         storage_set_asset_raised(env, &token_address, new_asset_raised);
 
@@ -198,9 +198,9 @@ pub fn release_milestone_multi_asset(
     // ── 8. Update global total-raised bookkeeping ────────────────────────────
     let new_total_raised = total_raised
         .checked_sub(total_released)
-        .unwrap_or_else(|| panic_with_error!(env, Error::LedgerUnderflow));
+        .unwrap_or_else(|| panic_with_error!(env, Error::Overflow));
     if new_total_raised < 0 {
-        panic_with_error!(env, Error::LedgerUnderflow);
+        panic_with_error!(env, Error::Overflow);
     }
     storage_set_total_raised(env, new_total_raised);
     storage_increment_release_count(env);
