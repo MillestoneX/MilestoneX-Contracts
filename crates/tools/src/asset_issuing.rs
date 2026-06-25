@@ -250,7 +250,17 @@ mod tests {
         // May fail if issuing keys are not set, which is expected
         if let Ok(config) = result {
             assert!(!config.code.is_empty());
-            assert!(!config.issuing_public_key.is_empty() || config.issuing_public_key.is_empty());
+            assert!(config.code.len() <= 12);
+            assert!(
+                config.issuing_public_key.starts_with('G'),
+                "issuing_public_key must start with 'G' (got {})",
+                config.issuing_public_key
+            );
+            assert!(
+                config.issuing_secret_key.starts_with('S'),
+                "issuing_secret_key must start with 'S'"
+            );
+            config.validate().expect("env-loaded config must validate");
         }
     }
 

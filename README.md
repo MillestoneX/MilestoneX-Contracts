@@ -45,53 +45,76 @@ orbitChain-contract/
 - **`orbitchain-core`**: Legacy compatibility/reference contract; do not use for new campaign features
 - **`orbitchain-tools`**: Advanced CLI utilities for contract deployment, configuration, transaction management, and debugging
 
-## 🚀 CLI Features
+## 🛠️ Implemented CLI Commands
 
-The OrbitChain CLI provides comprehensive tools for contract management, transaction handling, and debugging:
+The `orbitchain-cli` binary (in `crates/tools`) ships with a focused set of
+sub-commands today. Anything **not** listed below is unimplemented and will
+print either `❌ Unknown command: …` or a stubbed "not yet implemented"
+banner with an issue link. Older documentation referenced several commands
+that do not exist yet; the canonical status table lives in
+[`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status) and
+is tracked in [issue #37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37).
 
-### Core Commands
-- `deploy` - Deploy contracts to Stellar networks
-- `invoke` - Call contract methods
-- `build-donation-tx` - Build donation transactions
-- `submit-tx` - Submit signed transactions
-- `verify-tx` - Verify transaction status
+### Configuration & Network
 
-### Advanced Features ✨ NEW
-- **Transaction History**: Track and analyze account transactions with filtering and export
-- **Batch Operations**: Execute multiple transactions efficiently with CSV templates
-- **Debugging Utilities**: Comprehensive network and account diagnostics
-- **Contract Interaction**: Query contracts, generate templates, and inspect state
-- **Account Management**: Create, import, and manage Stellar accounts securely
-- **Signing Requests**: Build transaction signing requests for wallet integration
-- **Response Handler**: Process and validate signed transactions from wallets
+- `config` — Print resolved environment and active network.
+- `network` — Print active Soroban network (RPC, Horizon, passphrase).
+- `vault` — Show SecureVault status and security best practices.
+- `toggle <testnet|mainnet>` — Switch the active network profile.
+
+### Asset Issuing
+
+- `asset config` — Show asset configuration.
+- `asset generate` — Generate issuing keypair.
+- `asset check` — Check issuing readiness.
+- `asset trustline <holder> [asset_code]` — Establish a trustline.
+- `asset issue <recipient> <amount>` — Issue assets to a recipient.
+
+### Key Management
+
+- `keymanager encrypt <password> <secret_key>` — Encrypt a Stellar secret key.
+- `keymanager decrypt <password> <encrypted_hex>` — Decrypt back to a secret key.
+- `keymanager init-vault <password>` — Initialize an encrypted vault.
+- `keymanager vault-status` / `vault-save <path>` / `vault-load <path> <password>` — Vault lifecycle.
+
+### Keypair Lifecycle
+
+- `keypair generate-master` — Generate a master keypair.
+- `keypair generate-distribution <issuing_public_key>` — Generate a distribution account.
+- `keypair show-master` / `keypair show-distribution` — Print stored keypairs (safe view).
+- `keypair fund <account_public_key> <amount_xlm>` — Friendbot-fund a testnet account.
+- `keypair validate-master` / `keypair validate-distribution` — Validate stored keypairs.
+
+### Wallet Signing & Response
+
+- `signing build-donation <donor> <campaign_id> <amount> [asset] [memo]` — Build a donation signing request.
+- `signing build-campaign <creator> <title> <goal> <deadline>` — Build a campaign creation request.
+- `signing build-custom <xdr> [description]` — Wrap an external XDR.
+- `signing validate <json_file>` / `signing export <json_file>` — Validate or export.
+- `response process <json>` / `response validate <file>` / `response save <json> <file>` / `response load <file>` — Wallet response lifecycle.
+- `response submit <file>` — **Placeholder** for native network submission (tracked in #37).
 
 ### Quick Examples
 
 ```bash
-# Get transaction history with summary
-orbitchain-cli tx-history --account GABJ2... --summary --export-csv transactions.csv
+# Inspect active configuration and network
+orbitchain-cli config
+orbitchain-cli network
+orbitchain-cli toggle testnet
 
-# Execute batch payments
-orbitchain-cli batch execute --file payments.csv --parallel --continue-on-error
+# Issue a custom asset and establish trustline
+orbitchain-cli asset generate
+orbitchain-cli asset trustline GABJ2... USDC
+orbitchain-cli asset issue GABJ2... 100
 
-# Debug network issues
-orbitchain-cli debug network-status --network testnet --detailed
-
-# Query contract method
-orbitchain-cli contract query --contract CA3D... --method get_balance --simulate
-
-# Create and fund new account
-orbitchain-cli account create --generate-mnemonic
-orbitchain-cli account fund --account GABJ2... --network testnet
-
-# Build transaction signing request
+# Build a donation signing request for a donor
 orbitchain-cli signing build-donation GBJCHU... 1 5000000 XLM "Supporting education"
 
-# Process wallet response
+# Process the wallet's signed response
 orbitchain-cli response process '{"requestId":"req_123","xdr":"AAAA...","signer":"GBJCHU...","signedAt":1234567890}'
 ```
 
-For detailed documentation, refer to the inline help: run any command with `--help` for full usage information.
+For the full command list, run `orbitchain-cli` with no arguments.
 
 ## 🛠️ Development Setup
 
@@ -209,37 +232,40 @@ cargo test --workspace
 
 ### CLI Usage
 
+> The commands below match `crates/tools/src/main.rs` and the canonical
+> status table in
+> [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
+> `deploy`, `invoke`, and `account` are currently stubs in the CLI binary;
+> use the native `stellar contract …` commands or `make deploy-testnet`
+> instead. `config init`, `contract-id`, `build-donation-tx`, `submit-tx`,
+> `verify-tx`, `prepare-wallet-signing`, and `complete-wallet-signing`
+> shown in older docs are **not implemented** — see issue
+> [#37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37).
+
 ```bash
-# Check configuration
-cargo run -p orbitchain-tools -- config check
-
-# Initialize configuration (creates .env and contract ID files)
-cargo run -p orbitchain-tools -- config init
-
-# Show network configuration
+# Inspect resolved configuration / network / vault
+cargo run -p orbitchain-tools -- config
 cargo run -p orbitchain-tools -- network
+cargo run -p orbitchain-tools -- vault
+cargo run -p orbitchain-tools -- toggle testnet
 
-# Deploy contract to testnet
-cargo run -p orbitchain-tools -- deploy --network testnet
+# Issue assets via the asset namespace
+cargo run -p orbitchain-tools -- asset config
+cargo run -p orbitchain-tools -- asset generate
+cargo run -p orbitchain-tools -- asset trustline GABJ2... USDC
+cargo run -p orbitchain-tools -- asset issue GABJ2... 100
 
-# Deploy contract to sandbox (local)
-cargo run -p orbitchain-tools -- deploy --network sandbox
+# Encrypted vault operations
+cargo run -p orbitchain-tools -- keymanager init-vault "$VAULT_MASTER_PASSWORD"
+cargo run -p orbitchain-tools -- keymanager vault-status
 
-# Invoke the ping method on deployed contract
-cargo run -p orbitchain-tools -- invoke ping
+# Keypair lifecycle (the entry point that replaced `account create|fund`)
+cargo run -p orbitchain-tools -- keypair generate-master
+cargo run -p orbitchain-tools -- keypair fund GABJ2... 10
 
-# Invoke with custom network
-cargo run -p orbitchain-tools -- invoke ping --network testnet
-
-# Show deployed contract ID
-cargo run -p orbitchain-tools -- contract-id
-cargo run -p orbitchain-tools -- contract-id --network testnet
-
-# Prepare wallet signing flow (freighter/albedo/lobstr)
-cargo run -p orbitchain-tools -- prepare-wallet-signing --wallet freighter --xdr "<UNSIGNED_XDR>"
-
-# Complete wallet signing flow with wallet callback/response payload
-cargo run -p orbitchain-tools -- complete-wallet-signing --wallet freighter --attempt-id "<ATTEMPT_ID>" --response "<WALLET_RESPONSE>" --started-at-unix 1700000000
+# Wallet signing + response
+cargo run -p orbitchain-tools -- signing build-donation GBJCHU... 1 5000000 XLM "Supporting education"
+cargo run -p orbitchain-tools -- response process '{"requestId":"req_123","xdr":"AAAA...","signer":"GBJCHU...","signedAt":1234567890}'
 ```
 
 ## 🚀 Quick Start: Deploy Your First Contract
@@ -266,8 +292,8 @@ This guide walks you through deploying the canonical campaign contract to testne
 ### Step 1: Build the Contract
 
 ```bash
-# Build WASM contract
-make wasm
+# Build WASM contracts (campaign + core + token-bridge + common)
+make build-wasm
 
 # Or build everything including CLI tools
 make build
@@ -298,44 +324,67 @@ SOROBAN_ADMIN_KEY=GA7...
 
 ### Step 3: Deploy to Testnet
 
+> The in-CLI `deploy` command is a stub today. Use the build-in Makefile
+> target (or `scripts/deploy.sh`) which is wired into `stellar contract deploy`
+> for real network output. Tracking: issue
+> [#37](https://github.com/OrbitChainLabs/OrbitChain-Contracts/issues/37).
+
 ```bash
-# Deploy the contract
-cargo run -p orbitchain-tools -- deploy --network testnet
+# Deploy via the Makefile wrapper (uses scripts/deploy.sh + stellar-cli)
+make deploy-testnet
+# Or invoke the deploy script directly:
+bash scripts/deploy.sh testnet
 ```
 
 Expected output:
 
 ```
-🚀 Deploying to network: testnet
-📦 Using WASM: target/wasm32-unknown-unknown/debug/orbitchain_campaign.wasm
-✅ Contract deployed successfully!
+ℹ️  Using optimized WASM: target/wasm32v1-none/release/orbitchain_core.wasm
+🚀 Deploying to testnet...
+   RPC: https://soroban-testnet.stellar.org:443
+   WASM: target/wasm32v1-none/release/orbitchain_core.wasm
+✅ Contract deployed!
 📝 Contract ID: CB7...ABC
+💾 Deployment record saved to deployments/testnet.json
 ✅ Contract ID stored in .orbitchain_contract_id
 ```
 
 ### Step 4: Invoke the ping Method
 
+> The in-CLI `invoke` command is also a stub. Use `stellar contract invoke`
+> natively against your deployed contract ID.
+
 ```bash
-# Invoke ping
-cargo run -p orbitchain-tools -- invoke ping
+# Read the contract ID that Step 3 wrote out
+CONTRACT_ID=$(cat .orbitchain_contract_id)
+
+# Invoke a contract method (replace `version` with any contract method such as `ping`)
+stellar contract invoke \
+  --id "$CONTRACT_ID" \
+  --source test_account \
+  --network testnet \
+  -- version
 ```
 
 Expected output:
 
 ```
-🔄 Invoking method 'ping' on network: testnet
+🔄 Invoking method 'version' on network: testnet
 📝 Using contract ID: CB7...ABC
 ✅ Invocation successful!
-📤 Result: 1
+📤 Result: <contract version bytes>
 ```
 
 ### Step 5: Check Deployment
 
 ```bash
-# View all deployed contract IDs
-cargo run -p orbitchain-tools -- contract-id
+# View the deployed contract ID written by scripts/deploy.sh
+cat .orbitchain_contract_id
 
-# View network configuration
+# View the per-network deployment record
+cat deployments/testnet.json
+
+# View active network configuration
 cargo run -p orbitchain-tools -- network
 ```
 
@@ -344,22 +393,35 @@ cargo run -p orbitchain-tools -- network
 For local testing without testnet:
 
 ```bash
-# Start local sandbox
-soroban sandbox start
+# Start local sandbox (requires Docker)
+make sandbox-start
 
-# Deploy to sandbox
-cargo run -p orbitchain-tools -- deploy --network sandbox
+# Deploy to sandbox (uses scripts/deploy.sh sandbox)
+make deploy-sandbox
 
-# Invoke on sandbox
-cargo run -p orbitchain-tools -- invoke ping --network sandbox
+# Invoke on sandbox natively
+CONTRACT_ID=$(cat .orbitchain_contract_id)
+stellar contract invoke \
+  --id "$CONTRACT_ID" \
+  --source test_account \
+  --rpc-url http://localhost:8000/soroban/rpc \
+  --network-passphrase "Standalone Network ; February 2017" \
+  -- version
 ```
 
 ### Troubleshooting
 
-- **"WASM file not found"**: Run `make wasm` to build the contract first
-- **"No contract ID found"**: Deploy a contract first with `deploy` command
-- **"Configuration error"**: Run `cargo run -p orbitchain-tools -- config check` to diagnose
-- **"soroban: command not found"**: Install with `cargo install soroban-cli`
+- **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
+- **"Unknown command" or "coming soon"**: You ran an `orbitchain-cli` command
+  that is still a stub (`deploy`, `invoke`, `account`). Run
+  `cargo run -p orbitchain-tools` with no arguments to see which commands are
+  actually implemented, and follow
+  [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
+- **"No contract ID found"**: Run `make deploy-testnet` first — the
+  `scripts/deploy.sh` wrapper writes the ID to `.orbitchain_contract_id`.
+- **"Configuration error"**: Run `cargo run -p orbitchain-tools -- config` to
+  inspect resolved environment values.
+- **"soroban: command not found"**: Install with `cargo install --locked stellar-cli --features opt`.
 
 ## 📌 Features
 

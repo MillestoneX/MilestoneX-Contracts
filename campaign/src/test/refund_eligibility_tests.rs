@@ -8,21 +8,19 @@
 use soroban_sdk::testutils::{Address as AddressTestUtils, Ledger};
 use soroban_sdk::{Address, Env};
 
-use crate::types::{CampaignStatus, CampaignData, DonorRecord, AssetInfo, StellarAsset, MilestoneStatus};
-use crate::storage::{set_campaign, set_donor, set_milestone};
-use crate::CampaignContract;
 use super::with_contract;
+use crate::storage::{set_campaign, set_donor, set_milestone};
+use crate::types::{
+    AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneStatus, StellarAsset,
+};
+use crate::CampaignContract;
 
 /// Base ledger timestamp (1 year in seconds) so we can safely subtract
 /// to simulate "past" end_times without underflow.
 const BASE: u64 = 86400 * 365;
 
 /// Helper to create a test milestone
-fn create_test_milestone(
-    env: &Env,
-    campaign_index: u32,
-    status: MilestoneStatus,
-) {
+fn create_test_milestone(env: &Env, campaign_index: u32, status: MilestoneStatus) {
     let milestone = crate::types::MilestoneData {
         index: campaign_index,
         target_amount: 1000,
@@ -114,7 +112,10 @@ fn test_refund_not_eligible_campaign_goal_reached() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "GoalReached campaign should not be refund-eligible");
+        assert!(
+            !eligible,
+            "GoalReached campaign should not be refund-eligible"
+        );
     });
 }
 
@@ -142,7 +143,10 @@ fn test_refund_eligible_campaign_ended_no_milestone_released() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(eligible, "Ended campaign with no milestone released should be refund-eligible");
+        assert!(
+            eligible,
+            "Ended campaign with no milestone released should be refund-eligible"
+        );
     });
 }
 
@@ -167,7 +171,10 @@ fn test_refund_not_eligible_no_campaign() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Should not be refund-eligible if campaign not initialized");
+        assert!(
+            !eligible,
+            "Should not be refund-eligible if campaign not initialized"
+        );
     });
 }
 
@@ -181,7 +188,10 @@ fn test_refund_not_eligible_window_closed() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Refund should not be eligible after 30-day window closes");
+        assert!(
+            !eligible,
+            "Refund should not be eligible after 30-day window closes"
+        );
     });
 }
 
@@ -195,7 +205,10 @@ fn test_refund_not_eligible_already_claimed() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, true);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Donor should not be refund-eligible if already claimed");
+        assert!(
+            !eligible,
+            "Donor should not be refund-eligible if already claimed"
+        );
     });
 }
 
@@ -209,7 +222,10 @@ fn test_refund_window_edge_case_exactly_30_days() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(eligible, "Should be refund-eligible at exactly 30-day boundary");
+        assert!(
+            eligible,
+            "Should be refund-eligible at exactly 30-day boundary"
+        );
     });
 }
 
@@ -223,7 +239,10 @@ fn test_refund_window_edge_case_one_second_after_30_days() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(!eligible, "Should not be refund-eligible after 30-day window closes");
+        assert!(
+            !eligible,
+            "Should not be refund-eligible after 30-day window closes"
+        );
     });
 }
 
@@ -237,6 +256,9 @@ fn test_refund_eligibility_all_conditions() {
         let donor = Address::generate(&env);
         create_test_donor(&env, &donor, 100, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor.clone());
-        assert!(eligible, "Should be eligible with cancelled campaign, no claim, within window");
+        assert!(
+            eligible,
+            "Should be eligible with cancelled campaign, no claim, within window"
+        );
     });
 }
