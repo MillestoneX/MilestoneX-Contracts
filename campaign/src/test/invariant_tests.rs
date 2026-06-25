@@ -333,3 +333,52 @@ fn invariant_milestone_targets_strictly_ascending() {
         );
     });
 }
+
+/// Issue #36 (negative path): `apply_donation` must fail loudly on
+/// `total_donated` overflow instead of saturating at `i128::MAX`.
+///
+/// A donor already sitting at `i128::MAX` who applies one more unit must
+/// trigger the typed `Error::Overflow` panic (contract error #17), not a
+/// silent saturation that would corrupt every later refund/pro-rata read.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn apply_donation_overflow_total_donated_panics() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+
+    with_contract(&env, || {
+        use crate::types::{AssetInfo, DonorRecord};
+
+        let donor = Address::generate(&env);
+        let asset_info = AssetInfo::Stellar(Address::generate(&env));
+
+        let mut record = DonorRecord::new_for(donor, asset_info.clone());
+        record.total_donated = i128::MAX;
+
+        // One more unit overflows i128 -> must panic with Error::Overflow (#17),
+        // not saturate.
+        record.apply_donation(&env, 1, BASE, 1, asset_info);
+    });
+}
+
+/// Issue #36 (companion, see #49): `donation_count` must also fail loudly on
+/// overflow rather than saturating at `u32::MAX`.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn apply_donation_overflow_donation_count_panics() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+
+    with_contract(&env, || {
+        use crate::types::{AssetInfo, DonorRecord};
+
+        let donor = Address::generate(&env);
+        let asset_info = AssetInfo::Stellar(Address::generate(&env));
+
+        let mut record = DonorRecord::new_for(donor, asset_info.clone());
+        record.donation_count = u32::MAX;
+
+        // Incrementing the count past u32::MAX must panic, not saturate.
+        record.apply_donation(&env, 1, BASE, 1, asset_info);
+    });
+}

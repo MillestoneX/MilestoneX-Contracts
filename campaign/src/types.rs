@@ -509,11 +509,14 @@ impl DonorRecord {
         }
     }
 
-    /// Apply a new donation to this record.  Returns an error string (for
-    /// debug builds) rather than panicking so the call site can choose how
-    /// to surface it.
     /// Apply a new donation to this record. Panics with `Error::Overflow` if
     /// `total_donated` or `donation_count` overflows.
+    ///
+    /// Issue #36: this MUST use `checked_add` (not `saturating_add`). Saturating
+    /// would silently cap `total_donated` at `i128::MAX`, after which every
+    /// refund and pro-rata calculation reads a wrong value. Fail loudly on
+    /// overflow to match the contract-wide `Error::Overflow` convention — do
+    /// not re-introduce saturation here.
     pub fn apply_donation(
         &mut self,
         env: &Env,
