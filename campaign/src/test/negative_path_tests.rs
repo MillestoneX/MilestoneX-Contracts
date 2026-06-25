@@ -14,8 +14,8 @@ use crate::types::{
     AssetInfo, CampaignData, CampaignStatus, DataKey, DonorRecord, Error, MilestoneData,
     MilestoneStatus, StellarAsset,
 };
-use crate::CampaignContract;
 use crate::CampaignContractClient;
+use crate::{CampaignContract, MAX_DEADLINE_GAP_SECONDS};
 
 /// Base ledger timestamp (1 year in seconds) so we can safely subtract
 /// to simulate "past" end_times without underflow.
@@ -440,6 +440,31 @@ fn test_donate_fails_below_minimum() {
     });
 }
 
+#[test]
+#[should_panic(expected = "HostError")]
+fn test_donate_fails_on_donation_count_overflow() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let donor = Address::generate(&env);
+
+        // Manually create a donor record with max donation count
+        let record = DonorRecord {
+            donor: donor.clone(),
+            total_donated: 100,
+            asset: AssetInfo::Native,
+            last_donation_time: env.ledger().timestamp(),
+            last_donation_ledger: env.ledger().sequence(),
+            donation_count: u32::MAX,
+            refund_claimed: false,
+        };
+        set_donor(&env, &donor, &record);
+
+        CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
+    });
+}
+
 // ─── Refund negative-path tests ──────────────────────────────────────────────
 
 #[test]
@@ -703,6 +728,19 @@ fn test_extend_deadline_fails_past_time() {
         initialize_default_campaign(&env);
         let past_time = env.ledger().timestamp() - 1;
         CampaignContract::extend_deadline(env.clone(), past_time);
+    });
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #14)")]
+fn test_extend_deadline_fails_absurd_future_time() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let too_far = env.ledger().timestamp() + MAX_DEADLINE_GAP_SECONDS + 1;
+        CampaignContract::extend_deadline(env.clone(), too_far);
     });
 }
 
@@ -1020,5 +1058,81 @@ fn test_cancel_then_refund_eligible() {
         create_donor_record(&env, &donor, 500, false);
         let eligible = CampaignContract::is_refund_eligible(env.clone(), donor);
         assert!(eligible);
+    });
+}
+
+// ─── Freeze invariant regression tests ───────────────────────────────────────
+
+#[test]
+#[should_panic]
+fn test_end_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::end_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_campaign_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        CampaignContract::cancel_campaign(env.clone());
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_extend_deadline_frozen_panics() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        crate::storage::set_frozen(&env, true);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+    });
+}
+
+#[test]
+fn test_end_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::end_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Ended);
+    });
+}
+
+#[test]
+fn test_cancel_campaign_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        CampaignContract::cancel_campaign(env.clone());
+        let status = CampaignContract::get_campaign_status(env.clone());
+        assert_eq!(status.status, CampaignStatus::Cancelled);
+    });
+}
+
+#[test]
+fn test_extend_deadline_not_frozen_succeeds() {
+    let env = make_env();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        initialize_default_campaign(&env);
+        let new_end = env.ledger().timestamp() + 200_000;
+        CampaignContract::extend_deadline(env.clone(), new_end);
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(campaign.end_time, new_end);
     });
 }

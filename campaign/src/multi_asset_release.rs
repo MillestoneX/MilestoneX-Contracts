@@ -4,8 +4,8 @@ use crate::storage::{
     storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
     storage_set_asset_raised, storage_set_total_raised,
 };
-use crate::types::{Error, MilestoneStatus, StellarAsset};
-use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env, Vec};
+use crate::types::{Error, MilestoneStatus};
+use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -13,6 +13,9 @@ use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env, Vec};
 const MIN_TRANSFER_AMOUNT: i128 = 1;
 
 /// Maximum accepted assets per campaign to prevent unbounded loop gas costs.
+/// Kept as a documented invariant even though the runtime is bounded by
+/// Soroban resource limits — leaving the constant for future use.
+#[allow(dead_code)]
 const MAX_ACCEPTED_ASSETS: usize = 20;
 
 // ─── Helper: proportional release ────────────────────────────────────────────
@@ -193,6 +196,7 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
     if new_total_raised < 0 {
         panic_with_error!(env, Error::Overflow);
     }
+    let new_total_raised = total_raised.checked_sub(total_released).unwrap_or(0).max(0);
     storage_set_total_raised(env, new_total_raised);
     storage_increment_release_count(env);
 

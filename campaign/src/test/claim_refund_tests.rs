@@ -14,7 +14,7 @@ use soroban_sdk::{log, vec, Address, Env, Vec};
 use super::with_contract;
 use crate::storage::{set_campaign, set_donor, set_milestone};
 use crate::types::{
-    AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus,
+    AssetInfo, CampaignData, CampaignStatus, DataKey, DonorRecord, MilestoneData, MilestoneStatus,
     StellarAsset,
 };
 use crate::{CampaignContract, CampaignContractClient};
@@ -98,6 +98,137 @@ fn create_test_donor(env: &Env, donor: &Address, total_donated: i128, refund_cla
         refund_claimed,
     };
     set_donor(env, donor, &donor_record);
+}
+
+// ─── calculate_refund_amount typed-error tests (issue #33) ───────────────────
+
+/// Zero refund denominator must panic with typed `Error::Overflow`, not a WASM trap.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_zero_denominator() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, 100, 50, 0);
+    });
+}
+
+/// Negative refund denominator must also panic with typed `Error::Overflow`.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_negative_denominator() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, 100, 50, -1);
+    });
+}
+
+/// Integer overflow in refund numerator must panic with typed `Error::Overflow`.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_calculate_refund_amount_overflow() {
+    let env = make_env();
+    with_contract(&env, || {
+        crate::calculate_refund_amount(&env, i128::MAX, 2, 1);
+    });
+}
+
+/// PR #21 anti-dust floor: tiny pro-rata share rounds up to 1 unit.
+#[test]
+fn test_calculate_refund_amount_anti_dust_floor() {
+    let env = make_env();
+    with_contract(&env, || {
+        // (1 * 1) / 1000 = 0 in floor division, but numerator > 0 → bump to 1
+        let refund = crate::calculate_refund_amount(&env, 1, 1, 1000);
+        assert_eq!(refund, 1);
+    });
+}
+
+/// `claim_refund` must surface typed `Error::Overflow` when refund math overflows.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_claim_refund_refund_amount_overflow() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let token_issuer = Address::generate(&env);
+        let end_time = env.ledger().timestamp() + 1000;
+        let campaign = CampaignData {
+            creator: Address::generate(&env),
+            goal_amount: 1000,
+            raised_amount: 2,
+            end_time,
+            status: CampaignStatus::Cancelled,
+            accepted_assets: {
+                let mut assets = soroban_sdk::Vec::new(&env);
+                assets.push_back(StellarAsset {
+                    asset_code: soroban_sdk::String::from_str(&env, "TST"),
+                    issuer: Some(token_issuer.clone()),
+                });
+                assets
+            },
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: 0,
+            created_at_time: 0,
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        env.storage().persistent().set(
+            &DataKey::DonorAssetDonation(donor.clone(), token_issuer.clone()),
+            &i128::MAX,
+        );
+
+        CampaignContract::claim_refund(env.clone(), donor);
+    });
+}
+
+/// `claim_refund` must surface typed `Error::Overflow` when raised_amount is zero.
+#[test]
+#[should_panic(expected = "Error(Contract, #17)")]
+fn test_claim_refund_zero_denominator() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let token_issuer = Address::generate(&env);
+        let end_time = env.ledger().timestamp() + 1000;
+        let campaign = CampaignData {
+            creator: Address::generate(&env),
+            goal_amount: 1000,
+            raised_amount: 0,
+            end_time,
+            status: CampaignStatus::Cancelled,
+            accepted_assets: {
+                let mut assets = soroban_sdk::Vec::new(&env);
+                assets.push_back(StellarAsset {
+                    asset_code: soroban_sdk::String::from_str(&env, "TST"),
+                    issuer: Some(token_issuer.clone()),
+                });
+                assets
+            },
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: 0,
+            created_at_time: 0,
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        create_test_milestone(&env, 0, 1000, MilestoneStatus::Locked);
+
+        let donor = Address::generate(&env);
+        create_test_donor(&env, &donor, 100, false);
+        env.storage().persistent().set(
+            &DataKey::DonorAssetDonation(donor.clone(), token_issuer.clone()),
+            &100i128,
+        );
+
+        CampaignContract::claim_refund(env.clone(), donor);
+    });
 }
 
 // ─── Error path tests ────────────────────────────────────────────────────────

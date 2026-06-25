@@ -1,3 +1,9 @@
+// Issue: `Events::publish` is deprecated in soroban-sdk 26.x in favour of the
+// `#[contractevent]` macro. Migrating every event definition here is a
+// follow-up tracked separately; suppressing the warning keeps CI clean without
+// changing the published event topics or behaviour.
+#![allow(deprecated)]
+
 use soroban_sdk::{Address, Env, String, Symbol};
 
 /// Emitted when a donation is received by the campaign.

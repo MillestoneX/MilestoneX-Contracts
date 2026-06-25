@@ -7,6 +7,12 @@
 //! remaining behavior is gradually migrated into the canonical contract.
 
 #![no_std]
+// `Events::publish` and the bare `env.register_contract` test helper are
+// marked deprecated in soroban-sdk 26.x in favour of `#[contractevent]` and
+// `env.register`. Migrating every call site here is tracked as a follow-up
+// issue; suppressing the warning keeps CI clean without changing the
+// published event topics or test behaviour.
+#![allow(deprecated)]
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, vec, Address, Env, String,
     Symbol, Vec,

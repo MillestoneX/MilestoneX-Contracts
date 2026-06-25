@@ -4,10 +4,10 @@
 //! `CampaignContract`.
 
 use crate::event;
-use crate::storage::{get_campaign, set_campaign};
+use crate::storage::{get_campaign, is_frozen, set_campaign};
 use crate::types::{CampaignStatus, Error};
-use crate::validate_campaign_transition;
-use soroban_sdk::{panic_with_error, Address, Env};
+use crate::{validate_campaign_transition, MAX_DEADLINE_GAP_SECONDS};
+use soroban_sdk::{panic_with_error, Env};
 
 /// Issue #212 – End the campaign early (before deadline).
 ///
@@ -17,12 +17,18 @@ use soroban_sdk::{panic_with_error, Address, Env};
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
+/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
 /// - `Error::InvalidCampaignTransition` if campaign is already Ended or Cancelled
 pub fn end_campaign(env: &Env) {
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
+
+    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
 
     validate_campaign_transition(env, &campaign.status, &CampaignStatus::Ended)
         .unwrap_or_else(|e| panic_with_error!(env, e));
@@ -42,12 +48,18 @@ pub fn end_campaign(env: &Env) {
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
+/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
 /// - `Error::InvalidCampaignTransition` if campaign is already Cancelled
 pub fn cancel_campaign(env: &Env) {
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
+
+    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
 
     validate_campaign_transition(env, &campaign.status, &CampaignStatus::Cancelled)
         .unwrap_or_else(|e| panic_with_error!(env, e));
@@ -62,12 +74,17 @@ pub fn cancel_campaign(env: &Env) {
 /// Issue #215 – Extend the campaign deadline.
 ///
 /// Extends the campaign's `end_time` to a new future timestamp.
+/// The new deadline cannot be more than ten years from the current ledger time;
+/// this preserves the contract's time arithmetic invariants for status views,
+/// refund windows, milestone release metadata, and campaign reports.
 /// Requires creator authorization.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
+/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
 /// - `Error::InvalidEndTime` if `new_end_time <= current ledger timestamp`
+/// - `Error::InvalidEndTime` if `new_end_time` is more than ten years out
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
 pub fn extend_deadline(env: &Env, new_end_time: u64) {
     let mut campaign =
@@ -75,13 +92,19 @@ pub fn extend_deadline(env: &Env, new_end_time: u64) {
 
     campaign.creator.require_auth();
 
+    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
+
     match campaign.status {
         CampaignStatus::Active | CampaignStatus::GoalReached => {}
         _ => panic_with_error!(env, Error::InvalidCampaignTransition),
     }
 
     let current_time = env.ledger().timestamp();
-    if new_end_time <= current_time {
+    let max_end_time = current_time.saturating_add(MAX_DEADLINE_GAP_SECONDS);
+    if new_end_time <= current_time || new_end_time > max_end_time {
         panic_with_error!(env, Error::InvalidEndTime);
     }
 
