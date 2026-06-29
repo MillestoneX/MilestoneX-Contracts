@@ -538,6 +538,13 @@ This project uses `cargo-audit` and `cargo-deny` to maintain high security stand
 
 ### Local Scans
 
+Install the scan tools before running the Makefile targets:
+
+```bash
+cargo install cargo-audit --locked
+cargo install cargo-deny --locked
+```
+
 You can run the security scans locally using the following commands:
 
 - **Check for vulnerabilities**:
@@ -568,6 +575,8 @@ If a license or ban policy violation is found:
 ### Automated CI
 
 Security scans are automatically run on every push and pull request. CI will fail if any known vulnerabilities or policy violations are detected.
+
+The CI workflow installs `cargo-audit` and `cargo-deny` before invoking `make audit` and `make deny`, so missing binaries fail with the same actionable message contributors see locally.
 
 # 📜 License
 
