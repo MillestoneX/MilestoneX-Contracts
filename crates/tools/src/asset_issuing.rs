@@ -24,7 +24,7 @@ pub struct TrustlineConfig {
 
 impl AssetConfig {
     pub fn from_env() -> Result<Self> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let code = env::var("ASSET_CODE")
             .unwrap_or_else(|_| "ORBIT".to_string());

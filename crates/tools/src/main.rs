@@ -42,7 +42,7 @@ mod withdrawal_audit;
 mod withdrawal_limits;
 
 fn main() -> Result<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let args: Vec<String> = env::args().collect();
 

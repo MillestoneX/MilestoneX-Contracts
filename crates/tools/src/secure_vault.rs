@@ -23,7 +23,7 @@ pub struct SecureVault {
 impl SecureVault {
     #[must_use]
     pub fn from_env() -> Self {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         Self {
             admin_secret_key: env::var("SOROBAN_ADMIN_SECRET_KEY").ok(),

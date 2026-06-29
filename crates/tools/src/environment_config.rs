@@ -43,7 +43,7 @@ impl EnvironmentConfig {
     }
 
     pub fn from_env() -> Result<Self> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
 

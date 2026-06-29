@@ -3,6 +3,8 @@ name = "orbitchain-tools"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license = "MIT"
+publish = false
 description = "OrbitChain CLI tools — key management, signing, asset issuing, and payment processing"
 
 [[bin]]
@@ -15,7 +17,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1.0", features = ["rt", "macros", "time"] }
 anyhow = { workspace = true }
-dotenv = { workspace = true }
+dotenvy = { workspace = true }
 toml = "0.8"
 aes-gcm = "0.10"
 rand = "0.8"

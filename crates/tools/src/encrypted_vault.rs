@@ -58,7 +58,7 @@ impl EncryptedVault {
     /// Load vault configuration from .env file
     #[must_use]
     pub fn from_env() -> Result<Self> {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         // Try to get master password from environment
         let master_password = env::var("VAULT_MASTER_PASSWORD")
