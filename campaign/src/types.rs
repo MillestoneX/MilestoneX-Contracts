@@ -296,8 +296,6 @@ pub enum DataKey {
     ReleaseCount,
 
     // ── Temporary ───────────────────────────────────────────────────────────
-    /// Transient campaign status flag used during state transitions.
-    ContractStatus,
     /// Re-entrancy guard; present = locked, absent = unlocked.
     ReentrancyLock,
     /// Freeze flag; present and true = contract is frozen, mutating ops blocked.

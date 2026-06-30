@@ -305,29 +305,6 @@ pub fn storage_increment_asset_raised(env: &Env, token: &Address, delta: i128) -
     new_total
 }
 
-// ─── Contract status (temporary) ─────────────────────────────────────────────
-
-/// Load the transient contract status flag.
-/// Returns `None` if the entry has expired or was never set.
-pub fn get_contract_status(env: &Env) -> Option<u32> {
-    let key = DataKey::ContractStatus;
-    let value = env.storage().temporary().get(&key)?;
-    env.storage()
-        .temporary()
-        .extend_ttl(&key, TEMPORARY_BUMP_THRESHOLD, TEMPORARY_TTL);
-    Some(value)
-}
-
-/// Persist the transient contract status flag with a fresh TTL.
-pub fn set_contract_status(env: &Env, status: u32) {
-    let key = DataKey::ContractStatus;
-    env.storage().temporary().set(&key, &status);
-    // Set explicit TTL — temporary entries default to 1 ledger without this
-    env.storage()
-        .temporary()
-        .extend_ttl(&key, TEMPORARY_BUMP_THRESHOLD, TEMPORARY_TTL);
-}
-
 // ─── Re-entrancy lock (temporary) ────────────────────────────────────────────
 //
 // Soroban's transaction model prevents true re-entrancy, but cross-contract
@@ -371,30 +348,3 @@ pub fn set_frozen(env: &Env, frozen: bool) {
     bump_persistent(env, &key);
 }
 
-// ─── Bulk TTL refresh ─────────────────────────────────────────────────────────
-
-/// Refresh TTL for all core persistent keys in a single call.
-/// Call this from a `bump_storage` admin function to prevent archival
-/// during long-running campaigns.
-pub fn bump_all_persistent(env: &Env, milestone_count: u32) {
-    let core_keys = [
-        DataKey::CampaignData,
-        DataKey::TotalRaised,
-        DataKey::DonationCount,
-        DataKey::UniqueDonorCount,
-        DataKey::ReleaseCount,
-    ];
-
-    for key in &core_keys {
-        if env.storage().persistent().has(key) {
-            bump_persistent(env, key);
-        }
-    }
-
-    for i in 0..milestone_count {
-        let key = DataKey::MilestoneData(i);
-        if env.storage().persistent().has(&key) {
-            bump_persistent(env, &key);
-        }
-    }
-}
