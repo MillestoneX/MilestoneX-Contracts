@@ -126,7 +126,7 @@ impl CampaignContract {
         set_campaign(&env, &campaign);
 
         for (index, milestone) in milestones.iter().enumerate() {
-            set_milestone(&env, index as u32, &milestone);
+            set_milestone(&env, index as u32, milestone);
         }
 
         env.events().publish(
@@ -655,7 +655,7 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
     }
 }
 
-fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
+fn validate_assets(env: &Env, assets: &[StellarAsset]) -> Result<(), Error> {
     for asset in assets.iter() {
         if asset.asset_code.is_empty() {
             panic_with_error(env, Error::InvalidAssetCode);
@@ -666,7 +666,7 @@ fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
 
 fn validate_milestones(
     env: &Env,
-    milestones: &Vec<MilestoneData>,
+    milestones: &[MilestoneData],
     goal_amount: i128,
 ) -> Result<(), Error> {
     for i in 1..milestones.len() {
