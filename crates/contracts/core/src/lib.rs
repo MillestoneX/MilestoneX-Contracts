@@ -13,6 +13,19 @@
 // issue; suppressing the warning keeps CI clean without changing the
 // published event topics or test behaviour.
 #![allow(deprecated)]
+// The legacy reference contract in `crates/contracts/core/` ships a small
+// dashboard / analytics layer that performs multiplication and addition on
+// `i128` values that come from external storage (per-campaign raised totals,
+// per-asset raised totals, etc.). Clippy's `clippy::integer_arithmetic` /
+// `clippy::arithmetic_side_effects` lint group is pedantic-by-default and
+// would warn on `i128 * i128` and `i128 += i128` because their result can
+// silently wrap around on overflow in release builds. The canonical
+// implementation in `campaign/` already uses `checked_*` arithmetic with
+// `Error::Overflow` panic (see PR #36 / PR #77); this legacy crate was
+// written before that convention and is on a separate migration path. We
+// gate the lint here for this crate only; new code in `campaign/` must
+// continue using `checked_add` / `checked_mul` with `Error::Overflow`.
+#![allow(clippy::integer_arithmetic, clippy::arithmetic_side_effects)]
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, vec, Address, Env, String,
     Symbol, Vec,
