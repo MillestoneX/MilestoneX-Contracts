@@ -1,6 +1,6 @@
-# 🌟 OrbitChain
+# 🌟 MilestoneX
 
-[![CI](https://github.com/orbitchain/orbitchain-contracts/workflows/CI/badge.svg)](https://github.com/orbitchain/orbitchain-contracts/actions)
+[![CI](https://github.com/MillestoneX/MilestoneX-Contracts/workflows/CI/badge.svg)](https://github.com/MillestoneX/MilestoneX-Contracts/actions)
 
 ## Contract Canonicalization
 
