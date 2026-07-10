@@ -125,8 +125,9 @@ impl CampaignContract {
 
         set_campaign(&env, &campaign);
 
+        #[allow(clippy::needless_borrow)] // soroban_sdk::Vec::iter() yields owned MilestoneData by-value, not by reference; rebinding to `&milestone` invokes the auto-deref coercion once. The double-`&` is required, not needless from rustc's per-call-site perspective.
         for (index, milestone) in milestones.iter().enumerate() {
-            set_milestone(&env, index as u32, milestone);
+            set_milestone(&env, index as u32, &milestone);
         }
 
         env.events().publish(
@@ -655,7 +656,8 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
     }
 }
 
-fn validate_assets(env: &Env, assets: &[StellarAsset]) -> Result<(), Error> {
+#[allow(clippy::ptr_arg)] // soroban_sdk::Vec does not implement Deref<Target=[T]>, so `&Vec<T>` is mandatory here even though std::Vec would auto-coerce.
+fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     for asset in assets.iter() {
         if asset.asset_code.is_empty() {
             panic_with_error(env, Error::InvalidAssetCode);
@@ -664,9 +666,10 @@ fn validate_assets(env: &Env, assets: &[StellarAsset]) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(clippy::ptr_arg)] // soroban_sdk::Vec does not implement Deref<Target=[T]>, so `&Vec<T>` is mandatory here even though std::Vec would auto-coerce.
 fn validate_milestones(
     env: &Env,
-    milestones: &[MilestoneData],
+    milestones: &Vec<MilestoneData>,
     goal_amount: i128,
 ) -> Result<(), Error> {
     for i in 1..milestones.len() {
