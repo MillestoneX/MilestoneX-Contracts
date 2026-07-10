@@ -123,8 +123,8 @@ For the full command list, run `milestonex-cli` with no arguments.
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/orbitchain-contract.git
-   cd orbitchain-contract
+   git clone https://github.com/YOUR_USERNAME/milestonex-contract.git
+   cd milestonex-contract
    ```
 
 2. **Install Rust toolchain** (automatically configured by `rust-toolchain.toml`)
@@ -339,14 +339,14 @@ bash scripts/deploy.sh testnet
 Expected output:
 
 ```
-ℹ️  Using optimized WASM: target/wasm32v1-none/release/orbitchain_core.wasm
+ℹ️  Using optimized WASM: target/wasm32v1-none/release/milestonex_core.wasm
 🚀 Deploying to testnet...
    RPC: https://soroban-testnet.stellar.org:443
-   WASM: target/wasm32v1-none/release/orbitchain_core.wasm
+   WASM: target/wasm32v1-none/release/milestonex_core.wasm
 ✅ Contract deployed!
 📝 Contract ID: CB7...ABC
 💾 Deployment record saved to deployments/testnet.json
-✅ Contract ID stored in .orbitchain_contract_id
+✅ Contract ID stored in .milestonex_contract_id
 ```
 
 ### Step 4: Invoke the ping Method
@@ -356,7 +356,7 @@ Expected output:
 
 ```bash
 # Read the contract ID that Step 3 wrote out
-CONTRACT_ID=$(cat .orbitchain_contract_id)
+CONTRACT_ID=$(cat .milestonex_contract_id)
 
 # Invoke a contract method (replace `version` with any contract method such as `ping`)
 stellar contract invoke \
@@ -379,7 +379,7 @@ Expected output:
 
 ```bash
 # View the deployed contract ID written by scripts/deploy.sh
-cat .orbitchain_contract_id
+cat .milestonex_contract_id
 
 # View the per-network deployment record
 cat deployments/testnet.json
@@ -400,7 +400,7 @@ make sandbox-start
 make deploy-sandbox
 
 # Invoke on sandbox natively
-CONTRACT_ID=$(cat .orbitchain_contract_id)
+CONTRACT_ID=$(cat .milestonex_contract_id)
 stellar contract invoke \
   --id "$CONTRACT_ID" \
   --source test_account \
@@ -418,7 +418,7 @@ stellar contract invoke \
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
 - **"No contract ID found"**: Run `make deploy-testnet` first — the
-  `scripts/deploy.sh` wrapper writes the ID to `.orbitchain_contract_id`.
+  `scripts/deploy.sh` wrapper writes the ID to `.milestonex_contract_id`.
 - **"Configuration error"**: Run `cargo run -p milestonex-tools -- config` to
   inspect resolved environment values.
 - **"soroban: command not found"**: Install with `cargo install --locked stellar-cli --features opt`.
@@ -501,8 +501,8 @@ async fn main() -> Result<()> {
 Click the **“Fork”** button in the top‑right of the GitHub repo and clone your fork:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/orbitchain-contract.git
-cd orbitchain-contract
+git clone https://github.com/YOUR_USERNAME/milestonex-contract.git
+cd milestonex-contract
 ```
 
 ### 2. Create a Branch
