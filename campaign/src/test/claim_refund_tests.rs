@@ -427,7 +427,7 @@ fn test_claim_refund_ended_with_released_milestone_eligibility() {
     });
 }
 
-fn setup() -> (Env, CampaignContractClient<'_>, Address) {
+fn setup<'a>() -> (Env, CampaignContractClient<'a>, Address) {
     let env = Env::default();
     env.mock_all_auths();
 
