@@ -23,20 +23,16 @@ common = { package = "milestonex-common", path = "common" }
 # Workspace-wide exact pin for ed25519-dalek. soroban-env-host 26.1.3
 # testutils (used by soroban-sdk's testutils feature) calls
 # SigningKey::generate(chacha) with a rand 0.8 ChaCha20Rng. In
-# ed25519-dalek 2.2 this takes the rand_core 0.6 CryptoRng surface
+# ed25519-dalek 2.x this takes the rand_core 0.6 CryptoRng surface
 # (satisfied by ChaCha20Rng). In 3.0 the trait bound changed to
-# rand_core 0.9 CryptoRng, which ChaCha20Rng does not implement, and
-# 2.2 already diverges on some APIs. Pinning workspace-wide to 2.2.0
-# forces a single version across campaign's testutils and the
-# milestonex-tools ^2.2 range.
+# rand_core 0.9 CryptoRng, which ChaCha20Rng does not implement.
+# Pinning workspace-wide to 2.2.0 forces a single version across
+# campaign's testutils and the milestonex-tools ^2.2 range. NOTE:
+# a workspace-deps pin only constrains direct uses in workspace
+# members; it does NOT override the version requirement of the
+# transitive soroban-env-host dep, which is the actual root cause
+# of the test-job compile failure. A full fix requires either
+# bumping soroban-sdk to a version whose soroban-env-host is
+# compatible with ed25519-dalek 3.x, or vendoring. Tracked
+# separately.
 ed25519-dalek = "=2.2.0"
-
-# [patch.crates-io] is needed because the workspace-deps pin above only
-# constrains direct uses in workspace members. soroban-env-host 26.1.3
-# is a transitive dep of soroban-sdk 26.0.1 (pulled in by the
-# `testutils` feature) and its own version requirement is independent.
-# Patching forces all uses of ed25519-dalek — including the
-# transitive dep — to use the git tag v2.2.0, which keeps the
-# rand_core 0.6 CryptoRng surface that ChaCha20Rng satisfies.
-[patch.crates-io]
-ed25519-dalek = { git = "https://github.com/dalek-cryptography/curve25519-dalek", tag = "ed25519-2.2.0", path = "ed25519-dalek" }
