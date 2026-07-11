@@ -463,9 +463,16 @@ fn create_test_milestone_data(
 }
 
 fn token_asset(env: &Env) -> (StellarAssetClient<'_>, Address, TokenClient<'_>) {
+    // Use the v1 `register_stellar_asset_contract` API. The v2 variant
+    // (`register_stellar_asset_contract_v2`) goes through
+    // `soroban-env-host 26.1.3`'s testutils, which calls
+    // `SigningKey::generate(chacha)` and requires the rand_core 0.9
+    // `CryptoRng` surface that ed25519-dalek 3.0+ provides but
+    // 2.2 does not. The v1 API does not invoke that path, so it is
+    // compatible with whatever ed25519-dalek 2.x version Cargo
+    // resolves for the workspace.
     let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
+    let token_address = env.register_stellar_asset_contract(admin);
     let token = TokenClient::new(&env, &token_address);
     let token_sac = StellarAssetClient::new(&env, &token_address);
 
