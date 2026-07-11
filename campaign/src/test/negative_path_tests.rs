@@ -11,7 +11,7 @@ use soroban_sdk::{Address, BytesN, Env, String, Vec};
 use super::with_contract;
 use crate::storage::{get_campaign, set_campaign, set_donor, set_milestone};
 use crate::types::{
-    AssetInfo, CampaignData, CampaignStatus, DataKey, DonorRecord, Error, MilestoneData,
+    AssetInfo, CampaignStatus, DonorRecord, MilestoneData,
     MilestoneStatus, StellarAsset,
 };
 use crate::CampaignContractClient;
@@ -374,7 +374,7 @@ fn test_donate_fails_campaign_ended() {
     let env = make_env();
     env.mock_all_auths();
     with_contract(&env, || {
-        let (creator, _) = initialize_default_campaign(&env);
+        let _ = initialize_default_campaign(&env);
         CampaignContract::end_campaign(env.clone());
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor, 100, AssetInfo::Native);
@@ -1016,7 +1016,7 @@ fn test_full_lifecycle_happy_path() {
     let env = make_env();
     env.mock_all_auths();
     with_contract(&env, || {
-        let (creator, _) = initialize_default_campaign(&env);
+        let _ = initialize_default_campaign(&env);
         let status = CampaignContract::get_campaign_status(env.clone());
         assert_eq!(status.status, CampaignStatus::Active);
         assert!(status.days_remaining > 0);
