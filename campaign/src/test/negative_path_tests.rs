@@ -10,7 +10,9 @@ use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use super::with_contract;
 use crate::storage::{get_campaign, set_campaign, set_donor, set_milestone};
-use crate::types::{AssetInfo, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus, StellarAsset};
+use crate::types::{
+    AssetInfo, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus, StellarAsset,
+};
 use crate::CampaignContractClient;
 use crate::{CampaignContract, MAX_DEADLINE_GAP_SECONDS};
 
