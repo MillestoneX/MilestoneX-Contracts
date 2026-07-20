@@ -2,6 +2,14 @@
 
 [![CI](https://github.com/MillestoneX/MilestoneX-Contracts/workflows/CI/badge.svg)](https://github.com/MillestoneX/MilestoneX-Contracts/actions)
 
+## 📚 Community Documentation
+
+- [**Contributing Guide**](CONTRIBUTING.md) - Learn how to contribute to the project
+- [**Code of Conduct**](CODE_OF_CONDUCT.md) - Guidelines for community interactions
+- [**Maintainers**](MAINTAINERS.md) - Project maintainers and areas of ownership
+- [**Changelog**](CHANGELOG.md) - Release notes and version history
+- [**Security Policy**](SECURITY.md) - Security guidelines and vulnerability reporting
+
 ## Contract Canonicalization
 
 Decision: **Option B (conservative)** — keep `campaign/` (`milestonex-campaign`) as the canonical crowdfunding contract for all new development, audits, deployments, and integrations. The `campaign/` implementation remains the authoritative contract for milestone flows, refunds, freeze/upgrade controls, reentrancy protection, typed errors, and dashboard analytics.
