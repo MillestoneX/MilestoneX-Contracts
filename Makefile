@@ -3,11 +3,15 @@
 ##   make test         - Run all tests
 ##   make audit        - Run cargo audit
 ##   make deny         - Check licenses
-##   make fmt          - Format code
-##   make clippy       - Lint code
+##   make fmt          - Format contracts (excludes crates/tools — see issue #13)
+##   make fmt-tools    - Format crates/tools only (tracked: issue #13)
+##   make lint         - Lint contracts (excludes crates/tools — see issue #13)
+##   make lint-tools   - Lint crates/tools only (tracked: issue #13)
+##   make all-lint     - Run lint + lint-tools (full workspace coverage)
 
-.PHONY: build build-wasm build-tools test fmt lint clean optimize help \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny
+.PHONY: build build-wasm build-tools test fmt fmt-tools lint lint-tools all-lint \
+        clean optimize help setup deploy-testnet deploy-sandbox sandbox-start \
+        audit deny
 
 # Default target
 build: build-wasm build-tools
@@ -31,17 +35,45 @@ test:
 	cargo test --workspace
 	@echo "✅ Tests passed"
 
-# Format code
+# Format Soroban contract crates only.
+# crates/tools (milestonex-tools) is intentionally excluded here — it is a
+# native CLI with pre-existing rustfmt drift tracked in issue #13.
+# Use 'make fmt-tools' for tools-only formatting.
 fmt:
-	@echo "🎨 Formatting code..."
-	cargo fmt --all
+	@echo "🎨 Formatting contracts (crates/tools excluded — see issue #13)..."
+	cargo fmt -p milestonex-campaign -p milestonex-common -p milestonex-core -p milestonex-token-bridge
 	@echo "✅ Code formatted"
 
-# Run linter
+# Format crates/tools only.
+# Partial coverage introduced in issue #38; full workspace fmt gated on
+# resolving the pre-existing rustfmt drift tracked in issue #13.
+fmt-tools:
+	@echo "🎨 Formatting crates/tools (tracked: issue #13)..."
+	cargo fmt -p milestonex-tools -- --check
+	@echo "✅ crates/tools formatting check passed"
+
+# Lint Soroban contract crates only.
+# crates/tools (milestonex-tools) is intentionally excluded here — it is a
+# native CLI with separate lint conventions tracked in issue #13.
+# Use 'make lint-tools' for tools-only linting or 'make all-lint' for both.
 lint:
-	@echo "🔍 Running linter..."
-	cargo clippy --workspace -- -D warnings
-	@echo "✅ Linting passed"
+	@echo "🔍 Linting contracts (crates/tools excluded — see issue #13)..."
+	cargo clippy -p milestonex-campaign -p milestonex-common -p milestonex-core -p milestonex-token-bridge -- -D warnings
+	@echo "✅ Contract linting passed"
+
+# Lint crates/tools only.
+# Partial coverage introduced in issue #38; full workspace Clippy gated on
+# resolving the pre-existing lint debt tracked in issue #13.
+lint-tools:
+	@echo "🔍 Linting crates/tools (tracked: issue #13)..."
+	cargo clippy -p milestonex-tools -- -D warnings
+	@echo "✅ crates/tools linting passed"
+
+# Aggregate lint target: runs both contract and tools linters.
+# Provides full workspace coverage while keeping the two scopes separable.
+# See issue #13 for the tracked plan to unify under a single --workspace pass.
+all-lint: lint lint-tools
+	@echo "✅ All linting passed (contracts + tools)"
 
 # Clean build artifacts
 clean:
@@ -95,7 +127,12 @@ deny:
 # Optimize WASM binaries using wasm-opt (-Oz)
 optimize: build
 	@echo "🔧 Optimizing WASM binaries with wasm-opt..."
-	@for wasm in target/wasm32v1-none/release/*.wasm; do 		before=$$(wc -c < "$$wasm"); 		wasm-opt -Oz "$$wasm" -o "$$wasm.opt" && mv "$$wasm.opt" "$$wasm"; 		after=$$(wc -c < "$$wasm"); 		echo "  $$(basename $$wasm): $${before}B -> $${after}B"; 	done
+	@for wasm in target/wasm32v1-none/release/*.wasm; do \
+		before=$$(wc -c < "$$wasm"); \
+		wasm-opt -Oz "$$wasm" -o "$$wasm.opt" && mv "$$wasm.opt" "$$wasm"; \
+		after=$$(wc -c < "$$wasm"); \
+		echo "  $$(basename $$wasm): $${before}B -> $${after}B"; \
+	done
 	@echo "✅ Optimization complete"
 
 # Show help
@@ -106,11 +143,16 @@ help:
 	@echo "  make build-wasm     - Build Soroban WASM contract only"
 	@echo "  make build-tools    - Build CLI tools only"
 	@echo "  make test           - Run all tests"
-	@echo "  make fmt            - Format code"
-	@echo "  make lint           - Run linter"
+	@echo "  make fmt            - Format contract crates (crates/tools excluded; see issue #13)"
+	@echo "  make fmt-tools      - Format crates/tools only (tracked: issue #13)"
+	@echo "  make lint           - Lint contract crates (crates/tools excluded; see issue #13)"
+	@echo "  make lint-tools     - Lint crates/tools only (tracked: issue #13)"
+	@echo "  make all-lint       - Run lint + lint-tools (full workspace coverage)"
 	@echo "  make clean          - Clean build artifacts"
 	@echo "  make sandbox-start  - Start local Stellar sandbox (requires Docker)"
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
+	@echo "  make audit          - Run cargo-audit for vulnerability scanning"
+	@echo "  make deny           - Check license compliance with cargo-deny"
 	@echo "  make help           - Show this help message"
