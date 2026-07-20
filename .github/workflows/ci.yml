@@ -21,7 +21,11 @@ env:
   RUST_BACKTRACE: short
   # Workspace members that compile to wasm32 Soroban contracts. crates/tools
   # is intentionally excluded — it is a native CLI binary, not a contract, and
-  # has its own dev-tooling lint/test debt tracked separately.
+  # has its own dev-tooling lint/test debt tracked in issue #13.
+  # Partial coverage for crates/tools is available locally via:
+  #   make fmt-tools   (cargo fmt -p milestonex-tools -- --check)
+  #   make lint-tools  (cargo clippy -p milestonex-tools -- -D warnings)
+  # Full CI gating of crates/tools is blocked on resolving issue #13.
   CONTRACTS: >-
     -p milestonex-campaign
     -p milestonex-common
@@ -49,7 +53,8 @@ jobs:
         # Scope to the four Soroban contract crates only. crates/tools is a
         # native CLI with separate formatting conventions and pre-existing
         # rustfmt drift that is intentionally out of scope for this CI gate
-        # — see the PR description for the tracked follow-up.
+        # — full coverage is tracked in issue #13. Use 'make fmt-tools'
+        # locally for partial coverage (introduced in issue #38).
         run: cargo fmt ${{ env.CONTRACTS }} -- --check
 
   clippy:
@@ -68,7 +73,9 @@ jobs:
           cache-on-failure: true
       - name: cargo clippy (contracts)
         # Scope is intentionally narrower than the workspace because
-        # crates/tools is a native CLI with separate lint conventions.
+        # crates/tools is a native CLI with separate lint conventions and
+        # pre-existing Clippy debt tracked in issue #13. Use 'make lint-tools'
+        # locally for partial coverage (introduced in issue #38).
         run: cargo clippy ${{ env.CONTRACTS }} -- -D warnings
 
   test:
