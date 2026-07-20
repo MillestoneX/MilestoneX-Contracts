@@ -108,3 +108,44 @@ jobs:
           cache-on-failure: true
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
+
+  bindings-check:
+    name: Bindings freshness check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Needs write access to annotate diff output; all other jobs stay read-only.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32v1-none
+          cache: false
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Build campaign WASM (release)
+        run: cargo build -p milestonex-campaign --target wasm32v1-none --release
+      - name: Install stellar CLI
+        # Install the same CLI used in development (see `make setup`).
+        # --locked pins the dependency tree; --features opt enables the
+        # optimised build which includes the `contract bindings` sub-command.
+        run: cargo install --locked stellar-cli --features opt
+      - name: Regenerate bindings
+        run: |
+          mkdir -p bindings
+          stellar contract bindings json \
+            --wasm target/wasm32v1-none/release/milestonex_campaign.wasm \
+            --out bindings/
+      - name: Fail if bindings are stale
+        run: |
+          if ! git diff --exit-code bindings/milestonex_campaign.json; then
+            echo ""
+            echo "❌ bindings/milestonex_campaign.json is stale."
+            echo "   Run 'make bindings' locally and commit the updated file."
+            exit 1
+          fi
+          echo "✅ Bindings are up to date."
