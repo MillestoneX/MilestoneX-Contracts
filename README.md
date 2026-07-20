@@ -243,11 +243,13 @@ cargo test --workspace
 > The commands below match `crates/tools/src/main.rs` and the canonical
 > status table in
 > [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
-> `deploy`, `invoke`, and `account` are currently stubs in the CLI binary;
+> `deploy` and `invoke` are currently stubs in the CLI binary;
 > use the native `stellar contract …` commands or `make deploy-testnet`
-> instead. `config init`, `contract-id`, `build-donation-tx`, `submit-tx`,
-> `verify-tx`, `prepare-wallet-signing`, and `complete-wallet-signing`
-> shown in older docs are **not implemented** — see issue
+> instead. `account` is deprecated but still functional — it delegates to
+> `keypair` commands with a deprecation warning. `config init`,
+> `contract-id`, `build-donation-tx`, `submit-tx`, `verify-tx`,
+> `prepare-wallet-signing`, and `complete-wallet-signing` shown in older
+> docs are **not implemented** — see issue
 > [#37](https://github.com/MillestoneX/MilestoneX-Contracts/issues/37).
 
 ```bash
@@ -421,7 +423,7 @@ stellar contract invoke \
 
 - **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
 - **"Unknown command" or "coming soon"**: You ran an `milestonex-cli` command
-  that is still a stub (`deploy`, `invoke`, `account`). Run
+  that is still a stub (`deploy`, `invoke`). Run
   `cargo run -p milestonex-tools` with no arguments to see which commands are
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).

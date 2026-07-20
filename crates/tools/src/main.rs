@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         "asset" => handle_asset(&args[2..]),
         "deploy" => handle_deploy(),
         "invoke" => handle_invoke(&args[2..]),
-        "account" => handle_account(),
+        "account" => handle_account(&args[2..]),
         "keymanager" => handle_keymanager(&args[2..]),
         "keypair" => handle_keypair(&args[2..]),
         "signing" => handle_signing(&args[2..]),
@@ -92,7 +92,9 @@ fn print_available_commands() {
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
-    println!("  account               - Stub. Use `keypair generate-master|fund` instead.");
+    println!();
+    println!("Deprecated (still functional, but will be removed):");
+    println!("  account <cmd>         - Deprecated. Use `keypair generate-master|fund` instead.");
     println!();
     println!("Run `milestonex-cli <command>` (no subcommand) for usage details.");
     println!("Full status of every command mentioned in docs: docs/deployment.md.");
@@ -196,15 +198,53 @@ fn handle_invoke(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-fn handle_account() -> Result<()> {
-    println!("👤 The 'account' command is a stub and is NOT yet implemented in this binary.");
-    println!("💡 The account/keypair lifecycle is implemented under the `keypair` namespace:");
-    println!("     milestonex-cli keypair generate-master      # create a master keypair");
-    println!("     milestonex-cli keypair generate-distribution <issuing_public_key>");
-    println!("     milestonex-cli keypair fund <account_public_key> <amount_xlm>");
-    println!("     milestonex-cli keypair show-master|show-distribution");
-    println!("     milestonex-cli keypair validate-master|validate-distribution");
-    println!("🔗 Tracked in: https://github.com/MillestoneX/MilestoneX-Contracts/issues/37");
+fn handle_account(args: &[String]) -> Result<()> {
+    println!("⚠️  DEPRECATION WARNING: The 'account' namespace is deprecated and will be removed in a future release.");
+    println!("💡 Please use the 'keypair' namespace instead. See below for mapping.");
+    println!();
+
+    if args.is_empty() {
+        println!("👤 Account Management Commands (Deprecated)");
+        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+        println!("Usage: milestonex-cli account <command>");
+        println!();
+        println!("Commands (deprecated - use 'keypair' instead):");
+        println!("  create                              - Create master keypair (use 'keypair generate-master')");
+        println!("  fund <account> <amount>              - Fund account on testnet (use 'keypair fund')");
+        println!();
+        println!("💡 Migrate to:");
+        println!("     milestonex-cli keypair generate-master");
+        println!("     milestonex-cli keypair fund <account> <amount>");
+        return Ok(());
+    }
+
+    // Map account commands to keypair commands for backward compatibility
+    match args[0].as_str() {
+        "create" => {
+            println!("🔄 'account create' is deprecated. Delegating to 'keypair generate-master'...");
+            println!();
+            handle_keypair(&["generate-master".to_string()])?;
+        }
+        "fund" => {
+            if args.len() < 3 {
+                println!("Usage: milestonex-cli account fund <account_public_key> <amount_xlm>");
+                println!("💡 Please use: milestonex-cli keypair fund <account_public_key> <amount_xlm>");
+                return Ok(());
+            }
+            println!("🔄 'account fund' is deprecated. Delegating to 'keypair fund'...");
+            println!();
+            handle_keypair(&["fund".to_string(), args[1].clone(), args[2].clone()])?;
+        }
+        _ => {
+            println!("❌ Unknown account command: {}", args[0]);
+            println!("💡 The 'account' namespace is deprecated. Available commands:");
+            println!("   account create   (use 'keypair generate-master')");
+            println!("   account fund     (use 'keypair fund')");
+            println!();
+            println!("🔗 See https://github.com/MillestoneX/MilestoneX-Contracts/issues/37 for details");
+        }
+    }
+
     Ok(())
 }
 

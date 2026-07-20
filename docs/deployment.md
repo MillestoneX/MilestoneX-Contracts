@@ -158,9 +158,9 @@ to. Tracker: [issue #37](https://github.com/MillestoneX/MilestoneX-Contracts/iss
 | `milestonex-cli response …` | ✅ Implemented | `handle_response` (5 sub-commands) | Use as-is |
 | `milestonex-cli deploy` | ⚠️ **Stub** | `handle_deploy` prints an "NOT yet implemented" banner | Use `make deploy-testnet` or `bash scripts/deploy.sh testnet` |
 | `milestonex-cli invoke <method>` | ⚠️ **Stub** | `handle_invoke` prints an "NOT yet implemented" banner | Use `stellar contract invoke --id $CONTRACT_ID --source <KEY> --network testnet -- <method> [args…]` |
-| `milestonex-cli account` | ⚠️ **Stub** | `handle_account` prints an "NOT yet implemented" banner | Use `milestonex-cli keypair generate-master` (creation) or `keypair fund` (testnet funding) |
-| `milestonex-cli account create` | ❌ **Missing** | not in the dispatcher → `Unknown command` | Use `milestonex-cli keypair generate-master` |
-| `milestonex-cli account fund` | ❌ **Missing** (under `account` namespace) | Implemented under `keypair fund` | Use `milestonex-cli keypair fund <account> <amount_xlm>` |
+| `milestonex-cli account` | ⚠️ **Deprecated** | `handle_account` delegates to `keypair` with deprecation warning | Use `milestonex-cli keypair generate-master` (creation) or `keypair fund` (testnet funding) |
+| `milestonex-cli account create` | ⚠️ **Deprecated** | Delegates to `keypair generate-master` with deprecation warning | Use `milestonex-cli keypair generate-master` |
+| `milestonex-cli account fund` | ⚠️ **Deprecated** | Delegates to `keypair fund` with deprecation warning | Use `milestonex-cli keypair fund <account> <amount_xlm>` |
 | `milestonex-cli config init` | ❌ **Missing** | not in the dispatcher → `Unknown command` | Run `cp .env.example .env` and edit it manually |
 | `milestonex-cli config check` | ❌ **Missing** (subcommand) | top-level `config` prints + validates everything already | Use `milestonex-cli config` |
 | `milestonex-cli contract-id` | ❌ **Missing** | not in the dispatcher → `Unknown command` | Use `cat .milestonex_contract_id` or `cat deployments/<network>.json` |
