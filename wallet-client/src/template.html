@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MilestoneX – Wallet Connect</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --brand: #5b6af0;
+      --brand-dark: #4451d4;
+      --brand-light: #eef0fd;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --error: #ef4444;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --bg: #f0f4ff;
+      --card: #ffffff;
+      --mono: "Fira Mono", "Courier New", monospace;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    header {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    header h1 { margin: 0; font-size: 1.3rem; }
+    .badge {
+      font-size: .75rem;
+      font-weight: 600;
+      padding: .25rem .6rem;
+      border-radius: 999px;
+      background: var(--brand-light);
+      color: var(--brand);
+    }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.08);
+      padding: 1.75rem 2rem;
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 1.25rem;
+    }
+    .card h2 {
+      margin: 0 0 1rem;
+      font-size: 1rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    /* ── Wallet row ── */
+    #wallet-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--error);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .dot.connected { background: var(--success); }
+    #wallet-address-display {
+      font-family: var(--mono);
+      font-size: .82rem;
+      word-break: break-all;
+      color: var(--text);
+      flex: 1;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      background: var(--brand);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: .6rem 1.25rem;
+      font-size: .9rem;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+      white-space: nowrap;
+    }
+    .btn:hover:not(:disabled) { background: var(--brand-dark); }
+    .btn:disabled { opacity: .55; cursor: default; }
+    .btn.secondary {
+      background: transparent;
+      border: 1.5px solid var(--brand);
+      color: var(--brand);
+    }
+    .btn.secondary:hover:not(:disabled) { background: var(--brand-light); }
+    .btn.danger {
+      background: var(--error);
+    }
+    .btn.danger:hover:not(:disabled) { background: #c53030; }
+    .btn.sm { padding: .4rem .9rem; font-size: .82rem; }
+
+    /* ── Campaign state ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: .85rem;
+      margin-bottom: 1rem;
+    }
+    .stat-box {
+      background: var(--brand-light);
+      border-radius: 10px;
+      padding: .85rem;
+      text-align: center;
+    }
+    .stat-box .label { font-size: .72rem; color: var(--muted); margin-bottom: .3rem; }
+    .stat-box .value { font-size: 1.15rem; font-weight: 700; color: var(--text); }
+
+    /* Progress bar */
+    .progress-wrap { margin: .75rem 0 1rem; }
+    .progress-bar {
+      height: 10px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--brand);
+      border-radius: 999px;
+      transition: width .4s ease;
+    }
+    .progress-label {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: .3rem;
+    }
+
+    /* Status pill */
+    .status-pill {
+      display: inline-block;
+      font-size: .78rem;
+      font-weight: 600;
+      padding: .2rem .65rem;
+      border-radius: 999px;
+      background: var(--border);
+      color: var(--muted);
+    }
+    .status-pill.active    { background: #dcfce7; color: #15803d; }
+    .status-pill.goalreached { background: #fef9c3; color: #854d0e; }
+    .status-pill.ended     { background: #fee2e2; color: #991b1b; }
+    .status-pill.cancelled { background: #fce7f3; color: #9d174d; }
+
+    /* ── Milestones ── */
+    .milestone-list { list-style: none; margin: 0; padding: 0; }
+    .milestone-item {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .65rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .milestone-item:last-child { border-bottom: none; }
+    .m-icon { font-size: 1.1rem; }
+    .m-label { flex: 1; font-size: .88rem; color: var(--text); }
+    .m-amount { font-size: .85rem; font-weight: 600; color: var(--muted); font-family: var(--mono); }
+    .m-status { font-size: .75rem; font-weight: 600; padding: .15rem .5rem; border-radius: 4px; }
+    .m-status.locked     { background: #f3f4f6; color: var(--muted); }
+    .m-status.unlocked   { background: #fef9c3; color: #854d0e; }
+    .m-status.released   { background: #dcfce7; color: #15803d; }
+
+    /* ── Donate form ── */
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; }
+    input, select {
+      width: 100%;
+      padding: .55rem .75rem;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: .9rem;
+      color: var(--text);
+      background: var(--card);
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, select:focus { border-color: var(--brand); }
+    .form-row { display: flex; gap: .75rem; }
+    .form-row .form-group { flex: 1; }
+    .hint { font-size: .76rem; color: var(--muted); margin-top: .25rem; }
+
+    /* ── Status / toast ── */
+    #status-bar {
+      width: 100%;
+      max-width: 720px;
+      font-size: .85rem;
+      padding: .65rem 1rem;
+      border-radius: 8px;
+      background: #f3f4f6;
+      color: var(--muted);
+      min-height: 2.5rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+    #status-bar.ok    { background: #dcfce7; color: #15803d; }
+    #status-bar.err   { background: #fee2e2; color: #991b1b; }
+    #status-bar.info  { background: var(--brand-light); color: var(--brand-dark); }
+    #status-bar.warn  { background: #fef9c3; color: #854d0e; }
+
+    /* ── Campaign ID bar ── */
+    #campaign-id-bar {
+      display: flex;
+      gap: .6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #campaign-id-bar input { flex: 1; min-width: 200px; }
+
+    /* loader spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── XDR panel ── */
+    #xdr-panel,
+    #tx-result { display: none; }
+    #xdr-text {
+      font-family: var(--mono);
+      font-size: .72rem;
+      width: 100%;
+      background: #f9fafb;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: .6rem;
+      word-break: break-all;
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    /* ── Signed TX result ── */
+    #tx-result { display: none; }
+    #tx-hash {
+      font-family: var(--mono);
+      font-size: .8rem;
+      word-break: break-all;
+      background: #f0f4ff;
+      padding: .5rem .75rem;
+      border-radius: 6px;
+      margin-top: .5rem;
+    }
+    a.explorer-link {
+      font-size: .8rem;
+      color: var(--brand);
+      text-decoration: none;
+    }
+    a.explorer-link:hover { text-decoration: underline; }
+
+    /* responsive */
+    @media (max-width: 500px) {
+      .card { padding: 1.25rem; }
+      .form-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🌟 MilestoneX</h1>
+    <span class="badge" id="network-badge">testnet</span>
+  </header>
+
+  <!-- ── Wallet Card ── -->
+  <div class="card" id="wallet-card">
+    <h2>Wallet</h2>
+    <div id="wallet-row">
+      <span class="dot" id="conn-dot"></span>
+      <span id="wallet-address-display">Not connected</span>
+      <button class="btn" id="connect-btn">Connect Freighter</button>
+    </div>
+  </div>
+
+  <!-- ── Campaign ID Card ── -->
+  <div class="card">
+    <h2>Campaign</h2>
+    <div id="campaign-id-bar">
+      <input type="text" id="campaign-id-input" placeholder="Contract ID (e.g. CXXXXXXX…)" aria-label="Campaign contract ID" />
+      <button class="btn secondary sm" id="load-campaign-btn">Load</button>
+    </div>
+  </div>
+
+  <!-- ── Campaign State Card ── -->
+  <div class="card" id="campaign-state-card" style="display:none">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">
+      Campaign State
+      <button class="btn secondary sm" id="refresh-btn">↻ Refresh</button>
+    </h2>
+
+    <div style="margin-bottom:.75rem">
+      <span id="campaign-title" style="font-weight:700;font-size:1.05rem"></span>
+      <span id="campaign-status-pill" class="status-pill" style="margin-left:.5rem"></span>
+    </div>
+
+    <div class="stat-grid" id="stat-grid"></div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div class="progress-label" id="progress-label"></div>
+    </div>
+
+    <h2 style="margin-top:1.25rem">Milestones</h2>
+    <ul class="milestone-list" id="milestone-list"></ul>
+  </div>
+
+  <!-- ── Donate Card ── -->
+  <div class="card" id="donate-card" style="display:none">
+    <h2>Donate</h2>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="donate-amount">Amount (stroops)</label>
+        <input type="number" id="donate-amount" placeholder="e.g. 5000000" min="1" />
+        <div class="hint">1 XLM = 10 000 000 stroops</div>
+      </div>
+      <div class="form-group">
+        <label for="asset-select">Asset</label>
+        <select id="asset-select">
+          <option value="native">XLM (native)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="memo-input">Memo (optional)</label>
+      <input type="text" id="memo-input" placeholder="Supporting education…" maxlength="28" />
+    </div>
+
+    <button class="btn" id="donate-btn" disabled>Sign &amp; Donate</button>
+  </div>
+
+  <!-- ── XDR Preview Panel ── -->
+  <div class="card" id="xdr-panel">
+    <h2>Signed XDR</h2>
+    <textarea id="xdr-text" readonly></textarea>
+    <div style="margin-top:.75rem;display:flex;gap:.6rem;flex-wrap:wrap">
+      <button class="btn sm" id="submit-xdr-btn">Submit to Network</button>
+      <button class="btn secondary sm" id="copy-xdr-btn">Copy XDR</button>
+    </div>
+  </div>
+
+  <!-- ── Transaction Result ── -->
+  <div class="card" id="tx-result">
+    <h2>Transaction Submitted ✅</h2>
+    <div id="tx-hash"></div>
+    <div style="margin-top:.5rem">
+      <a href="#" id="explorer-link" class="explorer-link" target="_blank" rel="noreferrer">
+        View on Stellar Explorer ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- ── Status Bar ── -->
+  <div id="status-bar">Waiting for wallet connection…</div>
+
+</body>
+</html>

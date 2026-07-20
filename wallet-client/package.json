@@ -1,0 +1,22 @@
+{
+  "name": "milestonex-wallet-client",
+  "version": "1.0.0",
+  "description": "MilestoneX wallet signing/lifecycle client — builds to wallet_connect.html",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack serve --mode development --open",
+    "build:watch": "webpack --mode development --watch"
+  },
+  "dependencies": {
+    "@stellar/freighter-api": "3.1.0",
+    "@stellar/stellar-sdk": "13.1.0"
+  },
+  "devDependencies": {
+    "html-webpack-inline-source-plugin": "1.0.0-beta.2",
+    "html-webpack-plugin": "5.6.3",
+    "webpack": "5.99.9",
+    "webpack-cli": "6.0.1",
+    "webpack-dev-server": "5.2.2"
+  }
+}

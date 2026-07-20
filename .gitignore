@@ -1,6 +1,11 @@
 # Dependencies
 /target
 /Cargo.lock
+node_modules/
+wallet-client/node_modules/
+
+# JS build intermediates
+wallet_connect.bundle.js
 
 # Environment
 .env
