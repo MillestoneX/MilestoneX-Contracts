@@ -101,6 +101,15 @@ fn total_withdrawals_key() -> Symbol {
     symbol_short!("totalwd")
 }
 
+/// Issue #24 – O(1) active-campaign counter key.
+/// Incremented when a campaign is created (all campaigns start active).
+/// Decremented when a campaign transitions from active → inactive (future
+/// deactivation support).  Reading this key in `get_dashboard_metrics` avoids
+/// the previous O(N) full-scan over every stored campaign.
+fn active_campaign_count_key() -> Symbol {
+    symbol_short!("actvcnt")
+}
+
 // ── Events ───────────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -281,6 +290,16 @@ impl MilestoneXCoreContract {
         env.storage()
             .instance()
             .set(&symbol_short!("count"), &count);
+
+        // Issue #24 – increment O(1) active-campaign counter (every new campaign starts active).
+        let active_count: u64 = env
+            .storage()
+            .instance()
+            .get(&active_campaign_count_key())
+            .unwrap_or(0);
+        env.storage()
+            .instance()
+            .set(&active_campaign_count_key(), &(active_count + 1));
 
         // Emit CampaignCreated event
         env.events()
@@ -766,25 +785,20 @@ impl MilestoneXCoreContract {
 
     /// Issue #148 – dashboard analytics endpoint returning aggregate metrics,
     /// including a derived `active_campaigns` count.
+    ///
+    /// Issue #24 – `active_campaigns` is now read from the dedicated
+    /// `ActiveCampaignCount` storage key in O(1) instead of iterating over
+    /// every campaign in persistent storage.
     pub fn get_dashboard_metrics(env: Env) -> DashboardMetrics {
         let total_campaigns = Self::get_campaign_count(env.clone());
 
-        // Walk every stored campaign once to count active ones. Cheap because
-        // it only reads instance/persistent storage already paid for.
-        let mut active_campaigns: u64 = 0;
-        let mut id: u64 = 1;
-        while id <= total_campaigns {
-            if let Some(c) = env
-                .storage()
-                .persistent()
-                .get::<_, Campaign>(&campaign_key(id))
-            {
-                if c.active {
-                    active_campaigns += 1;
-                }
-            }
-            id += 1;
-        }
+        // Issue #24 – O(1): read the pre-maintained active-campaign counter
+        // instead of walking all N campaigns.
+        let active_campaigns: u64 = env
+            .storage()
+            .instance()
+            .get(&active_campaign_count_key())
+            .unwrap_or(0);
 
         DashboardMetrics {
             total_campaigns,
@@ -1170,5 +1184,74 @@ mod tests {
         assert_eq!(metrics.total_donations, 0);
         assert_eq!(metrics.total_withdrawals, 0);
         assert_eq!(metrics.total_transactions, 0);
+    }
+
+    /// Issue #24 – ActiveCampaignCount is incremented by create_campaign and
+    /// get_dashboard_metrics reads it in O(1).
+    ///
+    /// Verifies:
+    ///  - Counter starts at 0 on a fresh contract.
+    ///  - Each create_campaign increments it by 1.
+    ///  - The value returned in DashboardMetrics.active_campaigns matches.
+    ///  - Donations and withdrawals do NOT alter the counter (active flag is
+    ///    not changed by those operations in the core contract).
+    #[test]
+    fn test_active_campaign_count_tracking() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register_contract(None, MilestoneXCoreContract);
+        let client = MilestoneXCoreContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        client.initialize(&admin);
+
+        // No campaigns yet → counter is 0.
+        let m0 = client.get_dashboard_metrics();
+        assert_eq!(m0.active_campaigns, 0, "expected 0 active campaigns before any are created");
+
+        let creator = Address::generate(&env);
+
+        // Create first campaign → counter increments to 1.
+        let cid1 = client.create_campaign(&creator, &symbol_short!("camp1"), &10_000, &9_999_999);
+        let m1 = client.get_dashboard_metrics();
+        assert_eq!(m1.active_campaigns, 1, "expected 1 active campaign after first create");
+        assert_eq!(m1.total_campaigns, 1);
+
+        // Create second campaign → counter increments to 2.
+        let _cid2 = client.create_campaign(&creator, &symbol_short!("camp2"), &20_000, &9_999_999);
+        let m2 = client.get_dashboard_metrics();
+        assert_eq!(m2.active_campaigns, 2, "expected 2 active campaigns after second create");
+        assert_eq!(m2.total_campaigns, 2);
+
+        // Create third campaign → counter reaches 3.
+        let _cid3 = client.create_campaign(&creator, &symbol_short!("camp3"), &30_000, &9_999_999);
+        let m3 = client.get_dashboard_metrics();
+        assert_eq!(m3.active_campaigns, 3, "expected 3 active campaigns after third create");
+
+        // Donations must NOT change the active counter.
+        let donor = Address::generate(&env);
+        let xlm = symbol_short!("XLM");
+        let memo = String::from_str(&env, "m");
+        client.donate(&donor, &cid1, &1_000, &xlm, &memo);
+        let m4 = client.get_dashboard_metrics();
+        assert_eq!(
+            m4.active_campaigns, 3,
+            "donate must not alter active_campaigns counter"
+        );
+
+        // Withdrawal requests must NOT change the active counter.
+        let recipient = Address::generate(&env);
+        client.withdraw(&creator, &cid1, &recipient, &500);
+        let m5 = client.get_dashboard_metrics();
+        assert_eq!(
+            m5.active_campaigns, 3,
+            "withdraw must not alter active_campaigns counter"
+        );
+
+        // The counter must equal total_campaigns since no deactivation path
+        // exists yet in the core contract.
+        assert_eq!(
+            m5.active_campaigns, m5.total_campaigns,
+            "all created campaigns are active; counters must be equal"
+        );
     }
 }

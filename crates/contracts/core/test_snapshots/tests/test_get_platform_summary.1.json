@@ -836,6 +836,14 @@
                   "storage": [
                     {
                       "key": {
+                        "symbol": "actvcnt"
+                      },
+                      "val": {
+                        "u64": "2"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "admin"
                       },
                       "val": {
