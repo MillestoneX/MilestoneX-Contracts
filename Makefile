@@ -5,9 +5,10 @@
 ##   make deny         - Check licenses
 ##   make fmt          - Format code
 ##   make clippy       - Lint code
+##   make bindings     - Generate JSON ABI bindings for the campaign contract
 
 .PHONY: build build-wasm build-tools test fmt lint clean optimize help \
-        setup deploy-testnet deploy-sandbox sandbox-start audit deny
+        setup deploy-testnet deploy-sandbox sandbox-start audit deny bindings
 
 # Default target
 build: build-wasm build-tools
@@ -80,6 +81,17 @@ deploy-testnet: build-wasm
 	bash scripts/deploy.sh testnet
 
 
+# Generate JSON ABI bindings for the canonical campaign contract.
+# Requires: stellar CLI (cargo install --locked stellar-cli --features opt)
+# Requires: WASM built first (make build-wasm)
+bindings: build-wasm
+	@echo "📎 Generating contract bindings..."
+	@mkdir -p bindings
+	stellar contract bindings json \
+		--wasm target/wasm32v1-none/release/milestonex_campaign.wasm \
+		--out bindings/
+	@echo "✅ Bindings written to bindings/milestonex_campaign.json"
+
 # Run cargo-audit for vulnerability scanning
 audit:
 	@echo "🔒 Running security audit..."
@@ -113,4 +125,5 @@ help:
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
+	@echo "  make bindings       - Generate JSON ABI bindings for the campaign contract"
 	@echo "  make help           - Show this help message"

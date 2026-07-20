@@ -1,0 +1,194 @@
+{
+  "contract_name": "milestonex_campaign",
+  "contract_id": null,
+  "network_passphrase": null,
+  "functions": [
+    {
+      "name": "initialize",
+      "doc": "Initialize a new campaign with strict validation on all inputs.",
+      "inputs": [
+        { "name": "creator", "value": { "type": "address" } },
+        { "name": "goal_amount", "value": { "type": "i128" } },
+        { "name": "end_time", "value": { "type": "u64" } },
+        { "name": "accepted_assets", "value": { "type": "vec", "items": { "type": "custom", "name": "StellarAsset" } } },
+        { "name": "milestones", "value": { "type": "vec", "items": { "type": "custom", "name": "MilestoneData" } } },
+        { "name": "min_donation_amount", "value": { "type": "i128" } }
+      ],
+      "outputs": [
+        { "type": "result", "value": { "type": "void" }, "error": { "type": "custom", "name": "Error" } }
+      ]
+    },
+    {
+      "name": "donate",
+      "doc": "Donate to the campaign.",
+      "inputs": [
+        { "name": "donor", "value": { "type": "address" } },
+        { "name": "amount", "value": { "type": "i128" } },
+        { "name": "asset", "value": { "type": "custom", "name": "AssetInfo" } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_total_raised",
+      "doc": "Return the total amount raised across all assets.",
+      "inputs": [],
+      "outputs": [{ "type": "i128" }]
+    },
+    {
+      "name": "get_donation_count",
+      "doc": "Return the total number of donations.",
+      "inputs": [],
+      "outputs": [{ "type": "u64" }]
+    },
+    {
+      "name": "get_donor_count",
+      "doc": "Return the number of unique donors.",
+      "inputs": [],
+      "outputs": [{ "type": "u32" }]
+    },
+    {
+      "name": "get_release_count",
+      "doc": "Return the number of milestone releases.",
+      "inputs": [],
+      "outputs": [{ "type": "u64" }]
+    },
+    {
+      "name": "get_total_tx_count",
+      "doc": "Return the total transaction count.",
+      "inputs": [],
+      "outputs": [{ "type": "u64" }]
+    },
+    {
+      "name": "get_campaign_report",
+      "doc": "Return a full campaign report.",
+      "inputs": [],
+      "outputs": [{ "type": "option", "value": { "type": "custom", "name": "CampaignReport" } }]
+    },
+    {
+      "name": "get_platform_summary",
+      "doc": "Return a platform-level summary.",
+      "inputs": [],
+      "outputs": [{ "type": "custom", "name": "PlatformSummary" }]
+    },
+    {
+      "name": "get_dashboard_metrics",
+      "doc": "Return dashboard analytics metrics.",
+      "inputs": [],
+      "outputs": [{ "type": "custom", "name": "DashboardMetrics" }]
+    },
+    {
+      "name": "get_donor_record",
+      "doc": "Return the donor record for a given address.",
+      "inputs": [
+        { "name": "donor", "value": { "type": "address" } }
+      ],
+      "outputs": [{ "type": "option", "value": { "type": "custom", "name": "DonorRecord" } }]
+    },
+    {
+      "name": "hello",
+      "doc": "Health-check entry point.",
+      "inputs": [],
+      "outputs": [{ "type": "symbol" }]
+    },
+    {
+      "name": "version",
+      "doc": "Return the contract version.",
+      "inputs": [],
+      "outputs": [{ "type": "u32" }]
+    },
+    {
+      "name": "is_refund_eligible",
+      "doc": "Return whether a donor is eligible for a refund.",
+      "inputs": [
+        { "name": "donor", "value": { "type": "address" } }
+      ],
+      "outputs": [{ "type": "bool" }]
+    },
+    {
+      "name": "claim_refund",
+      "doc": "Claim a refund for a donor.",
+      "inputs": [
+        { "name": "donor", "value": { "type": "address" } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "end_campaign",
+      "doc": "End the campaign.",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "name": "cancel_campaign",
+      "doc": "Cancel the campaign.",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "name": "extend_deadline",
+      "doc": "Extend the campaign deadline.",
+      "inputs": [
+        { "name": "new_end_time", "value": { "type": "u64" } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_campaign_status",
+      "doc": "Return the current campaign status.",
+      "inputs": [],
+      "outputs": [{ "type": "custom", "name": "CampaignStatusResponse" }]
+    },
+    {
+      "name": "release_milestone",
+      "doc": "Release funds for a completed milestone (single asset).",
+      "inputs": [
+        { "name": "milestone_index", "value": { "type": "u32" } },
+        { "name": "recipient", "value": { "type": "address" } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "release_milestone_multi_asset",
+      "doc": "Release funds for a completed milestone (multi-asset).",
+      "inputs": [
+        { "name": "milestone_index", "value": { "type": "u32" } },
+        { "name": "recipient", "value": { "type": "address" } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "get_milestone_view",
+      "doc": "Return details for a specific milestone by index.",
+      "inputs": [
+        { "name": "index", "value": { "type": "u32" } }
+      ],
+      "outputs": [{ "type": "custom", "name": "MilestoneData" }]
+    },
+    {
+      "name": "get_all_milestones",
+      "doc": "Return all milestones with their current state.",
+      "inputs": [],
+      "outputs": [{ "type": "vec", "items": { "type": "custom", "name": "MilestoneView" } }]
+    },
+    {
+      "name": "upgrade",
+      "doc": "Upgrade the contract WASM.",
+      "inputs": [
+        { "name": "new_wasm_hash", "value": { "type": "bytes_n", "n": 32 } }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "freeze",
+      "doc": "Freeze the contract, halting all state-changing operations.",
+      "inputs": [],
+      "outputs": []
+    },
+    {
+      "name": "unfreeze",
+      "doc": "Unfreeze the contract.",
+      "inputs": [],
+      "outputs": []
+    }
+  ]
+}
