@@ -50,7 +50,7 @@ pub fn get_milestones_page_view(env: &Env, page: u32, page_size: u32) -> Vec<Mil
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     // Validate page and page size
-    if page_size < 1 || page_size > MAX_PAGE_SIZE {
+    if !(1..=MAX_PAGE_SIZE).contains(&page_size) {
         panic_with_error!(env, Error::InvalidPage);
     }
 
@@ -199,8 +199,14 @@ mod tests {
             seed_milestone(&env, 2, MilestoneStatus::Locked);
             let result = get_milestones_page_view(&env, 0, 2);
             assert_eq!(result.len(), 2);
-            assert_eq!(result.get(0).unwrap().data.status, MilestoneStatus::Released);
-            assert_eq!(result.get(1).unwrap().data.status, MilestoneStatus::Unlocked);
+            assert_eq!(
+                result.get(0).unwrap().data.status,
+                MilestoneStatus::Released
+            );
+            assert_eq!(
+                result.get(1).unwrap().data.status,
+                MilestoneStatus::Unlocked
+            );
         });
     }
 
