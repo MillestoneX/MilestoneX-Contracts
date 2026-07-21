@@ -70,13 +70,21 @@ campaign reports meaningless while still allowing long-running campaigns.
 
 ## Withdrawal Audit Log
 
-> Issue [#38](https://github.com/MillestoneX/MilestoneX-Contracts/issues/38)
+> Issue [#38](https://github.com/MillestoneX/MilestoneX-Contracts/issues/38) · Schema [#41](https://github.com/MillestoneX/MilestoneX-Contracts/issues/41)
 
 The off-chain withdrawal audit log
 (`crates/tools/src/withdrawal_audit.rs`, `WithdrawalAuditLog`) is the primary
 **non-blockchain** record of admin actions on creator withdrawals. It keeps an
 in-memory buffer for fast reads and a durable append-only on-disk sink so the
 trail survives process crashes, restarts, and container eviction.
+
+A machine-readable **JSON Schema (draft-07)** for `WithdrawalLogEntry` and
+`WithdrawalAction` lives in
+[`docs/audit-log.schema.json`](./audit-log.schema.json). The schema is
+embedded in the binary at compile time via
+`WITHDRAWAL_LOG_SCHEMA: &str = include_str!("../../../docs/audit-log.schema.json")`
+and validated against example entries by `cargo test -p milestonex-tools`. CI
+additionally validates the schema file itself with `make lint-schema` (ajv-cli).
 
 ### On-disk schema
 
