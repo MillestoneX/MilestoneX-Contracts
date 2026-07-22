@@ -848,6 +848,25 @@ mod test {
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
 
+    use soroban_sdk::{testutils::Address as AddressTestUtils, Address, BytesN, Env, String, Vec};
+
+    use crate::storage::get_campaign;
+    use crate::types::{
+        CampaignData, MilestoneData, MilestoneStatus, StellarAsset,
+    };
+
+    /// Pre-configured campaign environment returned by `with_campaign`.
+    ///
+    /// The env already has `mock_all_auths()` applied and the campaign
+    /// contract is registered and initialized. Callers can invoke contract
+    /// methods via `CampaignContract::method(fixture.env.clone(), ...)`.
+    pub struct CampaignFixture {
+        pub env: Env,
+        pub creator: Address,
+        pub contract_id: Address,
+        pub campaign: CampaignData,
+    }
+
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.
     /// Call `env.mock_all_auths()` BEFORE this if auth is needed.
@@ -896,6 +915,80 @@ mod test {
             mem,
             mem_max,
         );
+    }
+
+    /// Set up an env with a fully initialized campaign contract.
+    ///
+    /// `prefix` is a human-readable label (e.g. `"donation_flow"`) for
+    /// documentation and future parallel-test scoping; it does not affect
+    /// storage isolation (each `Env` is independent).
+    ///
+    /// The returned `CampaignFixture` contains the env, creator address,
+    /// contract ID, and the initial campaign state.
+    ///
+    /// ## Ordering guidance
+    ///
+    /// 1. Call `with_campaign("my_test_name")` to get a fixture.
+    /// 2. `env.mock_all_auths()` is already called — for tests that need
+    ///    real auth, call `env.mock_all_auths_reset()` first.
+    /// 3. Invoke contract methods via `CampaignContract::method(...)`.
+    /// 4. Assert storage state via `get_campaign`, `get_milestone`, etc.
+    ///
+    /// ## Example
+    ///
+    /// ```ignore
+    /// let fx = with_campaign("test_donate");
+    /// CampaignContract::donate(fx.env.clone(), fx.creator, 500, AssetInfo::Native);
+    /// ```
+    pub fn with_campaign(prefix: &str) -> CampaignFixture {
+        let _ = prefix; // reserved for future parallel-test scoping
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let creator = Address::generate(&env);
+        let goal_amount: i128 = 1000;
+
+        let mut assets: Vec<StellarAsset> = Vec::new(&env);
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(&env, "XLM"),
+            issuer: Some(Address::generate(&env)),
+        });
+
+        let mut milestones: Vec<MilestoneData> = Vec::new(&env);
+        milestones.push_back(MilestoneData {
+            index: 0,
+            target_amount: goal_amount,
+            released_amount: 0,
+            description_hash: BytesN::from_array(&env, &[1u8; 32]),
+            status: MilestoneStatus::Locked,
+            released_at: None,
+            released_at_ledger: None,
+            release_tx: None,
+            released_to: None,
+        });
+
+        let contract_id = env.register_contract(None, crate::CampaignContract);
+
+        let campaign = env.as_contract(&contract_id, || {
+            crate::CampaignContract::initialize(
+                env.clone(),
+                creator.clone(),
+                goal_amount,
+                env.ledger().timestamp() + 86400,
+                assets,
+                milestones,
+                0,
+            )
+            .unwrap();
+            get_campaign(&env).expect("campaign should be stored after initialize")
+        });
+
+        CampaignFixture {
+            env,
+            creator,
+            contract_id,
+            campaign,
+        }
     }
 }
 
