@@ -250,10 +250,50 @@ mod error_code_tests {
             .map(|(variant, code)| alloc::format!("{:?} -> {}", variant, code))
             .collect::<alloc::vec::Vec<_>>()
             .join("\n");
-        let expected = include_str!("../test_snapshots/wire_code_fixture.txt");
+        const EXPECTED: &str =
+"AlreadyInitialized -> 1
+NotInitialized -> 2
+Unauthorized -> 3
+CampaignEnded -> 4
+CampaignNotActive -> 5
+AssetNotAccepted -> 6
+DonationTooSmall -> 7
+MilestoneNotFound -> 8
+MilestoneNotUnlocked -> 9
+PreviousMilestoneNotReleased -> 10
+CannotCancelWithFunds -> 11
+RefundWindowClosed -> 12
+InvalidGoalAmount -> 13
+InvalidEndTime -> 14
+InvalidMilestones -> 15
+InsufficientContractBalance -> 16
+Overflow -> 17
+InvalidAssets -> 18
+InvalidAssetCode -> 19
+MilestoneMismatch -> 20
+InvalidMilestoneCount -> 21
+InvalidCampaignTransition -> 22
+InvalidMilestoneTransition -> 23
+GoalNotReached -> 24
+InvalidStorageValue -> 25
+StorageWriteError -> 26
+InvalidRecipient -> 30
+MissingIssuerAddress -> 31
+ZeroReleaseAmount -> 32
+NothingToRelease -> 33
+MilestoneReleasedExceedsTarget -> 34
+MilestoneAlreadyReleased -> 40
+UnreleasedMilestonesExist -> 41
+RefundNotPermitted -> 50
+NoDonorRecord -> 51
+RefundAlreadyClaimed -> 52
+ReentrantCall -> 60
+InvalidAmount -> 70
+ContractFrozen -> 80
+InvalidPage -> 84";
         assert_eq!(
-            actual.trim().replace("\r\n", "\n"),
-            expected.trim().replace("\r\n", "\n"),
+            actual.trim(),
+            EXPECTED.trim(),
             "WIRE_CODE_TABLE snapshot mismatch — regenerate with: \
              cargo test -p milestonex-campaign update_wire_fixture 2>/dev/null || true; \
              cp campaign/src/test/wire_format_actual.txt campaign/test_snapshots/wire_code_fixture.txt",
