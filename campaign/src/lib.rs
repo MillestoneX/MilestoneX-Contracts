@@ -851,9 +851,7 @@ mod test {
     use soroban_sdk::{testutils::Address as AddressTestUtils, Address, BytesN, Env, String, Vec};
 
     use crate::storage::get_campaign;
-    use crate::types::{
-        CampaignData, MilestoneData, MilestoneStatus, StellarAsset,
-    };
+    use crate::types::{CampaignData, MilestoneData, MilestoneStatus, StellarAsset};
 
     /// Pre-configured campaign environment returned by `with_campaign`.
     ///
