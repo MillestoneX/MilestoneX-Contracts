@@ -568,6 +568,12 @@ impl CampaignContract {
         get_all_milestones::get_all_milestones_view(&env)
     }
 
+    /// Get paginated list of milestones (enriched views).
+    /// No auth required (read-only view).
+    pub fn get_milestones_page(env: Env, page: u32, page_size: u32) -> Vec<views::MilestoneView> {
+        get_all_milestones::get_milestones_page_view(&env, page, page_size)
+    }
+
     /// Issue #246 – Upgrade the contract's WASM hash.
     ///
     /// Only the admin (creator address stored at initialization) can call this.

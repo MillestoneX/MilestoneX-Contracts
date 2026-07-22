@@ -1,7 +1,7 @@
 use soroban_sdk::{panic_with_error, Env, Vec};
 
 use crate::storage::{get_campaign, get_milestone};
-use crate::types::Error;
+use crate::types::{Error, MAX_PAGE_SIZE};
 use crate::views::{find_next_pending_index, MilestoneView};
 
 /// Issue #200 – Returns enriched views for ALL milestones in the campaign.
@@ -20,6 +20,50 @@ pub fn get_all_milestones_view(env: &Env) -> Vec<MilestoneView> {
 
     let mut result: Vec<MilestoneView> = Vec::new(env);
     for i in 0..campaign.milestone_count {
+        let data = get_milestone(env, i)
+            .unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound));
+        let pending_release = data.pending_release();
+        let is_fully_released = data.is_fully_released();
+        let is_next_pending = next_pending == i;
+        result.push_back(MilestoneView {
+            data,
+            pending_release,
+            is_fully_released,
+            is_next_pending,
+        });
+    }
+    result
+}
+
+/// Returns a paginated list of enriched milestone views.
+///
+/// # Parameters
+/// - `page`: Page number (0-indexed).
+/// - `page_size`: Number of milestones per page (must be between 1 and MAX_PAGE_SIZE).
+///
+/// # Panics
+/// - `Error::NotInitialized` — contract not yet initialised.
+/// - `Error::InvalidPage` — page * page_size >= milestone_count or page_size out of range.
+#[must_use]
+pub fn get_milestones_page_view(env: &Env, page: u32, page_size: u32) -> Vec<MilestoneView> {
+    let campaign =
+        get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
+
+    // Validate page and page size
+    if !(1..=MAX_PAGE_SIZE).contains(&page_size) {
+        panic_with_error!(env, Error::InvalidPage);
+    }
+
+    let start_index = page * page_size;
+    if start_index >= campaign.milestone_count {
+        panic_with_error!(env, Error::InvalidPage);
+    }
+
+    let next_pending = find_next_pending_index(env);
+    let mut result: Vec<MilestoneView> = Vec::new(env);
+
+    let end_index = (start_index + page_size).min(campaign.milestone_count);
+    for i in start_index..end_index {
         let data = get_milestone(env, i)
             .unwrap_or_else(|| panic_with_error!(env, Error::MilestoneNotFound));
         let pending_release = data.pending_release();
@@ -140,6 +184,85 @@ mod tests {
         let env = make_env();
         with_contract(&env, || {
             let _ = get_all_milestones_view(&env);
+        });
+    }
+
+    // ── get_milestones_page_view tests ───────────────────────────────────────
+
+    #[test]
+    fn returns_first_page_of_milestones() {
+        let env = make_env();
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            seed_milestone(&env, 0, MilestoneStatus::Released);
+            seed_milestone(&env, 1, MilestoneStatus::Unlocked);
+            seed_milestone(&env, 2, MilestoneStatus::Locked);
+            let result = get_milestones_page_view(&env, 0, 2);
+            assert_eq!(result.len(), 2);
+            assert_eq!(
+                result.get(0).unwrap().data.status,
+                MilestoneStatus::Released
+            );
+            assert_eq!(
+                result.get(1).unwrap().data.status,
+                MilestoneStatus::Unlocked
+            );
+        });
+    }
+
+    #[test]
+    fn returns_second_page_of_milestones() {
+        let env = make_env();
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            seed_milestone(&env, 0, MilestoneStatus::Locked);
+            seed_milestone(&env, 1, MilestoneStatus::Locked);
+            seed_milestone(&env, 2, MilestoneStatus::Locked);
+            let result = get_milestones_page_view(&env, 1, 2);
+            assert_eq!(result.len(), 1);
+            assert_eq!(result.get(0).unwrap().data.index, 2);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_with_invalid_page() {
+        let env = make_env();
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            seed_milestone(&env, 0, MilestoneStatus::Locked);
+            seed_milestone(&env, 1, MilestoneStatus::Locked);
+            seed_milestone(&env, 2, MilestoneStatus::Locked);
+            let _ = get_milestones_page_view(&env, 2, 2);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_with_page_size_zero() {
+        let env = make_env();
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            let _ = get_milestones_page_view(&env, 0, 0);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn panics_with_page_size_too_large() {
+        let env = make_env();
+        with_contract(&env, || {
+            seed_campaign(&env, 3);
+            let _ = get_milestones_page_view(&env, 0, MAX_PAGE_SIZE + 1);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn get_milestones_page_panics_when_not_initialised() {
+        let env = make_env();
+        with_contract(&env, || {
+            let _ = get_milestones_page_view(&env, 0, 5);
         });
     }
 }

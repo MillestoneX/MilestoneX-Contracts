@@ -115,7 +115,12 @@ pub enum Error {
 
     /// Campaign accepts multiple assets; use `release_milestone_multi_asset` instead.
     UseMultiAssetRelease = 82,
+    /// Invalid page or page size for paginated milestone retrieval.
+    InvalidPage = 84,
 }
+
+/// Maximum number of milestones returned per page for `get_milestones_page`.
+pub const MAX_PAGE_SIZE: u32 = 10;
 
 #[cfg(test)]
 mod error_code_tests {
@@ -166,6 +171,7 @@ mod error_code_tests {
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
             Error::UseMultiAssetRelease as u32,
+            Error::InvalidPage as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));

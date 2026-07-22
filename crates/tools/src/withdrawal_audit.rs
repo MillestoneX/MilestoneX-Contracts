@@ -32,6 +32,16 @@ use std::io::Write;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+/// Machine-readable JSON Schema (draft-07) for [`WithdrawalLogEntry`].
+///
+/// Embedded at compile time from `docs/audit-log.schema.json` so the schema
+/// travels with the binary and can be served, validated against, or exported
+/// by tooling without a separate file-system lookup.
+///
+/// CI validates the schema with `make lint-schema` (ajv-cli). See issue #41.
+pub const WITHDRAWAL_LOG_SCHEMA: &str =
+    include_str!("../../../docs/audit-log.schema.json");
+
 /// A single admin action on a creator withdrawal, mirroring the on-chain
 /// withdrawal lifecycle plus the off-chain `Rejected` outcome.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -477,6 +487,146 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&WithdrawalAction::Requested).unwrap(),
             "\"requested\""
+        );
+    }
+
+    // ── Schema embedding ──────────────────────────────────────────────────────
+
+    /// WITHDRAWAL_LOG_SCHEMA must be valid JSON (the schema file is embedded via
+    /// include_str! at compile time — this catches any accidental corruption).
+    #[test]
+    fn schema_constant_is_valid_json() {
+        let parsed: serde_json::Value =
+            serde_json::from_str(WITHDRAWAL_LOG_SCHEMA).expect("WITHDRAWAL_LOG_SCHEMA is not valid JSON");
+        // Sanity: the root object must carry the expected $schema declaration.
+        assert_eq!(
+            parsed["$schema"],
+            "http://json-schema.org/draft-07/schema#",
+            "schema must declare JSON Schema draft-07"
+        );
+        // And the title must match the struct name.
+        assert_eq!(
+            parsed["title"],
+            "WithdrawalLogEntry",
+            "schema title must be WithdrawalLogEntry"
+        );
+    }
+
+    /// Every serialized WithdrawalLogEntry must contain exactly the required
+    /// fields declared by the schema, and optional fields must be absent when
+    /// they hold no value (not serialized as `null`).
+    #[test]
+    fn serialized_entries_match_schema_shape() {
+        let mut log = sample_log();
+
+        // Entry without optional fields.
+        log.log(
+            WithdrawalAction::Rejected,
+            3,
+            "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            5_000_000,
+            "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            None,
+            None,
+        );
+        // Entry with both optional fields.
+        log.log(
+            WithdrawalAction::Submitted,
+            5,
+            "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            100,
+            "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            Some(9),
+            Some("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef".into()),
+        );
+
+        let schema: serde_json::Value =
+            serde_json::from_str(WITHDRAWAL_LOG_SCHEMA).unwrap();
+        let required_fields: Vec<&str> = schema["required"]
+            .as_array()
+            .expect("schema must have a 'required' array")
+            .iter()
+            .map(|v| v.as_str().expect("required entry is a string"))
+            .collect();
+
+        for entry in log.entries() {
+            let json = serde_json::to_string(entry).unwrap();
+            let obj: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+            // Every required field must be present.
+            for field in &required_fields {
+                assert!(
+                    obj.get(*field).is_some(),
+                    "required field '{field}' missing in serialized entry: {json}"
+                );
+            }
+
+            // Optional fields must be absent entirely (not serialized as null)
+            // when the underlying Option is None — matching
+            // `#[serde(skip_serializing_if = "Option::is_none")]`.
+            if entry.ledger_timestamp.is_none() {
+                assert!(
+                    obj.get("ledger_timestamp").is_none(),
+                    "ledger_timestamp must be absent when None, got: {json}"
+                );
+            }
+            if entry.tx_hash.is_none() {
+                assert!(
+                    obj.get("tx_hash").is_none(),
+                    "tx_hash must be absent when None, got: {json}"
+                );
+            }
+
+            // action must be one of the four snake_case enum values.
+            let valid_actions = ["requested", "approved", "submitted", "rejected"];
+            let action_val = obj["action"].as_str().expect("action must be a string");
+            assert!(
+                valid_actions.contains(&action_val),
+                "action '{action_val}' is not a valid WithdrawalAction variant"
+            );
+        }
+    }
+
+    /// The four WithdrawalAction variants serialize to the exact snake_case
+    /// strings declared in the schema's enum array.
+    #[test]
+    fn action_variants_match_schema_enum() {
+        let schema: serde_json::Value =
+            serde_json::from_str(WITHDRAWAL_LOG_SCHEMA).unwrap();
+        let schema_enum: Vec<&str> = schema["definitions"]["WithdrawalAction"]["enum"]
+            .as_array()
+            .expect("WithdrawalAction definition must have an 'enum' array")
+            .iter()
+            .map(|v| v.as_str().expect("enum value is a string"))
+            .collect();
+
+        let rust_variants = [
+            (WithdrawalAction::Requested, "requested"),
+            (WithdrawalAction::Approved, "approved"),
+            (WithdrawalAction::Submitted, "submitted"),
+            (WithdrawalAction::Rejected, "rejected"),
+        ];
+
+        for (variant, expected_wire) in &rust_variants {
+            let wire = serde_json::to_string(variant).unwrap();
+            let wire = wire.trim_matches('"');
+            assert_eq!(
+                wire, *expected_wire,
+                "Rust variant serializes to unexpected string"
+            );
+            assert!(
+                schema_enum.contains(expected_wire),
+                "wire value '{expected_wire}' missing from schema enum: {schema_enum:?}"
+            );
+        }
+
+        // All schema enum values must have a corresponding Rust variant.
+        assert_eq!(
+            schema_enum.len(),
+            rust_variants.len(),
+            "schema enum has {} values but Rust defines {} variants",
+            schema_enum.len(),
+            rust_variants.len()
         );
     }
 }
