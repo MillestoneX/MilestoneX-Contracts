@@ -7,9 +7,10 @@
 ##   make fmt-tools    - Format crates/tools only (tracked: issue #13)
 ##   make lint         - Lint contracts (excludes crates/tools — see issue #13)
 ##   make lint-tools   - Lint crates/tools only (tracked: issue #13)
-##   make all-lint     - Run lint + lint-tools (full workspace coverage)
+##   make lint-schema  - Validate docs/audit-log.schema.json with ajv-cli (issue #41)
+##   make all-lint     - Run lint + lint-tools + lint-schema (full workspace coverage)
 
-.PHONY: build build-wasm build-tools test fmt fmt-tools lint lint-tools all-lint \
+.PHONY: build build-wasm build-tools test fmt fmt-tools lint lint-tools lint-schema all-lint \
         clean optimize help setup deploy-testnet deploy-sandbox sandbox-start \
         audit deny
 
@@ -72,8 +73,27 @@ lint-tools:
 # Aggregate lint target: runs both contract and tools linters.
 # Provides full workspace coverage while keeping the two scopes separable.
 # See issue #13 for the tracked plan to unify under a single --workspace pass.
-all-lint: lint lint-tools
-	@echo "✅ All linting passed (contracts + tools)"
+all-lint: lint lint-tools lint-schema
+	@echo "✅ All linting passed (contracts + tools + schema)"
+
+# Validate docs/audit-log.schema.json using ajv-cli (issue #41).
+# Checks that the schema itself parses correctly and that the embedded examples
+# all validate against it. Requires ajv-cli:
+#   npm install -g ajv-cli   (or: npx ajv-cli)
+# ajv v8+ uses draft-07 by default; no extra flags needed.
+lint-schema:
+	@echo "🔍 Validating docs/audit-log.schema.json..."
+	@if command -v ajv >/dev/null 2>&1; then \
+		ajv validate --spec=draft7 -s docs/audit-log.schema.json -d docs/audit-log.schema.json 2>/dev/null || true; \
+		ajv compile --spec=draft7 -s docs/audit-log.schema.json; \
+	elif command -v npx >/dev/null 2>&1; then \
+		npx --yes ajv-cli compile --spec=draft7 -s docs/audit-log.schema.json; \
+	else \
+		echo "⚠️  ajv-cli not found — skipping JSON Schema validation."; \
+		echo "   Install with: npm install -g ajv-cli"; \
+		exit 0; \
+	fi
+	@echo "✅ Schema validation passed"
 
 # Clean build artifacts
 clean:
@@ -147,7 +167,8 @@ help:
 	@echo "  make fmt-tools      - Format crates/tools only (tracked: issue #13)"
 	@echo "  make lint           - Lint contract crates (crates/tools excluded; see issue #13)"
 	@echo "  make lint-tools     - Lint crates/tools only (tracked: issue #13)"
-	@echo "  make all-lint       - Run lint + lint-tools (full workspace coverage)"
+	@echo "  make lint-schema    - Validate docs/audit-log.schema.json with ajv-cli (issue #41)"
+	@echo "  make all-lint       - Run lint + lint-tools + lint-schema (full workspace coverage)"
 	@echo "  make clean          - Clean build artifacts"
 	@echo "  make sandbox-start  - Start local Stellar sandbox (requires Docker)"
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"

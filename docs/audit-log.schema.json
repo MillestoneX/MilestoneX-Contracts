@@ -1,0 +1,106 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/MillestoneX/MilestoneX-Contracts/blob/main/docs/audit-log.schema.json",
+  "title": "WithdrawalLogEntry",
+  "description": "One immutable off-chain audit record for an admin action on a creator withdrawal. Stored as JSON Lines (one object per line, append-only) in a 0o600-permission file. Defined by crates/tools/src/withdrawal_audit.rs. See docs/deployment.md § 'Withdrawal Audit Log'.",
+  "type": "object",
+  "required": [
+    "campaign_id",
+    "recipient",
+    "amount",
+    "action",
+    "actor",
+    "timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "campaign_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Campaign the withdrawal belongs to. Corresponds to the on-chain campaign identifier (Rust u64).",
+      "examples": [5]
+    },
+    "recipient": {
+      "type": "string",
+      "pattern": "^G[A-Z2-7]{55}$",
+      "description": "Creator Stellar public key address in strkey format (G... 56-character base32 string).",
+      "examples": ["GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]
+    },
+    "amount": {
+      "type": "integer",
+      "description": "Withdrawal amount in base units (stroops for XLM, or the asset's smallest indivisible unit). Mirrors the on-chain WithdrawalRequest.amount (Rust i128). Represented as a JSON integer; note that values outside [-2^53+1, 2^53-1] may lose precision in environments that parse JSON numbers as IEEE 754 doubles — consumers requiring full i128 fidelity should treat this field as a string.",
+      "examples": [100, 5000000]
+    },
+    "action": {
+      "$ref": "#/definitions/WithdrawalAction"
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identity of the party that performed this action — typically an admin or creator Stellar public key, or an operator identifier string.",
+      "examples": ["GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"]
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Off-chain audit clock time in Unix seconds, sourced from the injectable Clock trait (production: chrono::Utc::now()). Always present; use alongside ledger_timestamp for cross-checking against on-chain ledger time.",
+      "examples": [1700000000]
+    },
+    "ledger_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "On-chain Soroban ledger close timestamp (Unix seconds) for the corresponding WithdrawalRequested or WithdrawalApproved event, when available. Omitted (field absent) for off-chain-only actions such as 'rejected'. Lets auditors cross-check the off-chain audit clock against verifiable ledger time.",
+      "examples": [8, 99]
+    },
+    "tx_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "SHA-256 hash (64 lowercase hex characters) of the Soroban transaction that carried the on-chain event, if any. Omitted (field absent) for off-chain-only actions such as 'rejected'.",
+      "examples": ["deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"]
+    }
+  },
+  "definitions": {
+    "WithdrawalAction": {
+      "type": "string",
+      "title": "WithdrawalAction",
+      "description": "Admin action on a creator withdrawal, serialized as snake_case. Mirrors the on-chain withdrawal lifecycle events plus the off-chain 'rejected' outcome.\n\n- 'requested'  — Creator initiated a withdrawal (on-chain WithdrawalRequested event).\n- 'approved'   — Admin approved a pending request (on-chain WithdrawalApproved event).\n- 'submitted'  — Approved transaction confirmed on-chain.\n- 'rejected'   — Admin rejected a pending request (off-chain only; no on-chain event).",
+      "enum": ["requested", "approved", "submitted", "rejected"]
+    }
+  },
+  "examples": [
+    {
+      "campaign_id": 5,
+      "recipient": "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 100,
+      "action": "requested",
+      "actor": "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": 1700000000
+    },
+    {
+      "campaign_id": 5,
+      "recipient": "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 100,
+      "action": "approved",
+      "actor": "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": 1700000000,
+      "ledger_timestamp": 8
+    },
+    {
+      "campaign_id": 5,
+      "recipient": "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 100,
+      "action": "submitted",
+      "actor": "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": 1700000001,
+      "ledger_timestamp": 9,
+      "tx_hash": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+    },
+    {
+      "campaign_id": 3,
+      "recipient": "GCREATORAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "amount": 5000000,
+      "action": "rejected",
+      "actor": "GADMINAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "timestamp": 1700000050
+    }
+  ]
+}
