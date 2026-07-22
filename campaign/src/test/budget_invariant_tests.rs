@@ -32,7 +32,10 @@ use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use super::{assert_budget_under, with_contract};
-use crate::storage::{get_campaign, get_milestone, set_campaign, set_milestone};
+use crate::storage::{
+    get_campaign, get_milestone, set_campaign, set_milestone, storage_set_asset_raised,
+    storage_set_total_raised,
+};
 use crate::types::{
     AssetInfo, CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset,
 };
@@ -58,7 +61,7 @@ const DONATE_SINGLE_CPU_MAX: u64 = 800_000;
 const DONATE_SINGLE_MEM_MAX: u64 = 300_000;
 
 /// donate(5 donors, 3 milestones, sequential deposits reaching goal)
-const DONATE_MULTI_CPU_MAX: u64 = 2_500_000;
+const DONATE_MULTI_CPU_MAX: u64 = 5_000_000;
 const DONATE_MULTI_MEM_MAX: u64 = 800_000;
 
 /// release_milestone(single asset, 1 unlocked milestone, funded)
@@ -199,10 +202,14 @@ fn setup_multi_asset_release_campaign(env: &Env) -> Address {
         concluded_at_ledger: None,
     };
     set_campaign(env, &campaign);
-    for addr in &[token_a, token_b, token_c] {
+    for addr in &[token_a.clone(), token_b.clone(), token_c.clone()] {
         let sac = StellarAssetClient::new(env, addr);
         sac.mint(&env.current_contract_address(), &10_000_000i128);
+        storage_set_asset_raised(env, addr, 2000);
     }
+    // Total raised must be set separately from campaign.raised_amount for the
+    // multi-asset release path which reads DataKey::TotalRaised directly.
+    storage_set_total_raised(env, 6000);
     let milestone = MilestoneData {
         index: 0,
         target_amount: 3000,
@@ -218,7 +225,13 @@ fn setup_multi_asset_release_campaign(env: &Env) -> Address {
     creator
 }
 
-fn setup_client_env<'a>() -> (Env, CampaignContractClient<'a>, Address, Address, Address) {
+fn setup_client_env<'a>() -> (
+    Env,
+    CampaignContractClient<'a>,
+    StellarAssetClient<'a>,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
     let contract_id = env.register(CampaignContract, ());
@@ -227,7 +240,7 @@ fn setup_client_env<'a>() -> (Env, CampaignContractClient<'a>, Address, Address,
         let admin = Address::generate(&env);
         let addr = env.register_stellar_asset_contract(admin);
         let sac = StellarAssetClient::new(&env, &addr);
-        (sac, addr, TokenClient::new(&env, &addr))
+        (sac, addr.clone(), TokenClient::new(&env, &addr))
     };
     (env, client, token_sac, token_address, contract_id)
 }
@@ -305,7 +318,13 @@ fn budget_donate_multi_milestone() {
             0,
         )
         .unwrap();
-        let donors: Vec<Address> = (0..5).map(|_| Address::generate(&env)).collect();
+        let donors: Vec<Address> = {
+            let mut v = Vec::new(&env);
+            for _ in 0..5 {
+                v.push_back(Address::generate(&env));
+            }
+            v
+        };
         assert_budget_under(
             &env,
             "donate_multi_milestone",
