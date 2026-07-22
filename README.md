@@ -70,6 +70,10 @@ is tracked in [issue #37](https://github.com/MillestoneX/MilestoneX-Contracts/is
 - `vault` — Show SecureVault status and security best practices.
 - `toggle <testnet|mainnet>` — Switch the active network profile.
 
+### Deployment
+
+- `deploy [--dry-run] [--source <key>] [--fee <stroops>]` — Deploy the canonical campaign WASM to the configured network. Uses `SOROBAN_ADMIN_SECRET_KEY` (or `--source`), `SOROBAN_NETWORK`, and `SOROBAN_RPC_URL`/`SOROBAN_NETWORK_PASSPHRASE` overrides. Writes `deployments/<network>.json` and `.milestonex_contract_id`.
+
 ### Asset Issuing
 
 - `asset config` — Show asset configuration.
@@ -109,6 +113,11 @@ is tracked in [issue #37](https://github.com/MillestoneX/MilestoneX-Contracts/is
 milestonex-cli config
 milestonex-cli network
 milestonex-cli toggle testnet
+
+# Deploy the canonical campaign contract to testnet
+milestonex-cli deploy
+milestonex-cli deploy --dry-run
+milestonex-cli deploy --source my_key --fee 1000000
 
 # Issue a custom asset and establish trustline
 milestonex-cli asset generate
@@ -310,9 +319,8 @@ cargo test --workspace
 > The commands below match `crates/tools/src/main.rs` and the canonical
 > status table in
 > [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
-> `deploy` and `invoke` are currently stubs in the CLI binary;
-> use the native `stellar contract …` commands or `make deploy-testnet`
-> instead. `account` is deprecated but still functional — it delegates to
+> `invoke` is currently a stub in the CLI binary — use `stellar contract invoke`
+> natively. `account` is deprecated but still functional — it delegates to
 > `keypair` commands with a deprecation warning. `config init`,
 > `contract-id`, `build-donation-tx`, `submit-tx`, `verify-tx`,
 > `prepare-wallet-signing`, and `complete-wallet-signing` shown in older
@@ -339,6 +347,10 @@ cargo run -p milestonex-tools -- keymanager vault-status
 # Keypair lifecycle (the entry point that replaced `account create|fund`)
 cargo run -p milestonex-tools -- keypair generate-master
 cargo run -p milestonex-tools -- keypair fund GABJ2... 10
+
+# Deploy the canonical campaign contract to testnet
+cargo run -p milestonex-tools -- deploy
+cargo run -p milestonex-tools -- deploy --dry-run
 
 # Wallet signing + response
 cargo run -p milestonex-tools -- signing build-donation GBJCHU... 1 5000000 XLM "Supporting education"
@@ -401,25 +413,28 @@ SOROBAN_ADMIN_KEY=GA7...
 
 ### Step 3: Deploy to Testnet
 
-> The in-CLI `deploy` command is a stub today. Use the build-in Makefile
-> target (or `scripts/deploy.sh`) which is wired into `stellar contract deploy`
-> for real network output. Tracking: issue
-> [#37](https://github.com/MillestoneX/MilestoneX-Contracts/issues/37).
+> The CLI `deploy` command wraps `stellar contract deploy` and supports
+> `--dry-run`, `--source <key_name>`, and `--fee <stroops>`. You can also
+> use the Makefile target (`make deploy-testnet`) or `scripts/deploy.sh`.
 
 ```bash
-# Deploy via the Makefile wrapper (uses scripts/deploy.sh + stellar-cli)
+# Deploy via the CLI (uses SOROBAN_ADMIN_SECRET_KEY from .env)
+cargo run -p milestonex-tools -- deploy
+
+# Or use a named key and dry-run first:
+cargo run -p milestonex-tools -- deploy --source my_key --dry-run
+
+# Or use the Makefile wrapper (uses scripts/deploy.sh + stellar-cli)
 make deploy-testnet
-# Or invoke the deploy script directly:
 bash scripts/deploy.sh testnet
 ```
 
 Expected output:
 
 ```
-ℹ️  Using optimized WASM: target/wasm32v1-none/release/milestonex_core.wasm
 🚀 Deploying to testnet...
    RPC: https://soroban-testnet.stellar.org:443
-   WASM: target/wasm32v1-none/release/milestonex_core.wasm
+   WASM: target/wasm32v1-none/release/milestonex_campaign.wasm
 ✅ Contract deployed!
 📝 Contract ID: CB7...ABC
 💾 Deployment record saved to deployments/testnet.json
@@ -490,7 +505,7 @@ stellar contract invoke \
 
 - **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
 - **"Unknown command" or "coming soon"**: You ran an `milestonex-cli` command
-  that is still a stub (`deploy`, `invoke`). Run
+  that is still a stub (`invoke`). Run
   `cargo run -p milestonex-tools` with no arguments to see which commands are
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).

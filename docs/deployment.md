@@ -164,7 +164,7 @@ to. Tracker: [issue #37](https://github.com/MillestoneX/MilestoneX-Contracts/iss
 | `milestonex-cli keypair …` | ✅ Implemented | `handle_keypair` (7 sub-commands) | Use as-is |
 | `milestonex-cli signing …` | ✅ Implemented | `handle_signing` (5 sub-commands) | Use as-is |
 | `milestonex-cli response …` | ✅ Implemented | `handle_response` (5 sub-commands) | Use as-is |
-| `milestonex-cli deploy` | ⚠️ **Stub** | `handle_deploy` prints an "NOT yet implemented" banner | Use `make deploy-testnet` or `bash scripts/deploy.sh testnet` |
+| `milestonex-cli deploy [--dry-run] [--source <key>] [--fee <stroops>]` | ✅ Implemented | `handle_deploy` in `crates/tools/src/main.rs` calls `stellar contract deploy` via subprocess | Use as-is; supports `--dry-run`, `--source`, `--fee` |
 | `milestonex-cli invoke <method>` | ⚠️ **Stub** | `handle_invoke` prints an "NOT yet implemented" banner | Use `stellar contract invoke --id $CONTRACT_ID --source <KEY> --network testnet -- <method> [args…]` |
 | `milestonex-cli account` | ⚠️ **Deprecated** | `handle_account` delegates to `keypair` with deprecation warning | Use `milestonex-cli keypair generate-master` (creation) or `keypair fund` (testnet funding) |
 | `milestonex-cli account create` | ⚠️ **Deprecated** | Delegates to `keypair generate-master` with deprecation warning | Use `milestonex-cli keypair generate-master` |

@@ -5,6 +5,9 @@
 
 use anyhow::{Result, Context};
 use std::env;
+use std::fs;
+use std::path::Path;
+use std::process::Command;
 
 mod environment_config;
 use environment_config::{EnvironmentConfig, check_testnet_connection};
@@ -47,7 +50,7 @@ fn main() -> Result<()> {
         "vault" => handle_vault(),
         "toggle" => handle_toggle(&args[2..]),
         "asset" => handle_asset(&args[2..]),
-        "deploy" => handle_deploy(),
+        "deploy" => handle_deploy(&args[2..]),
         "invoke" => handle_invoke(&args[2..]),
         "account" => handle_account(&args[2..]),
         "keymanager" => handle_keymanager(&args[2..]),
@@ -87,10 +90,10 @@ fn print_available_commands() {
     println!("  keymanager <cmd>      - Key encryption and encrypted vault lifecycle");
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
+    println!("  deploy                - Deploy the canonical campaign WASM to the configured network (supports --dry-run, --source, --fee)");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
-    println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
     println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!();
     println!("Deprecated (still functional, but will be removed):");
@@ -161,19 +164,142 @@ fn handle_network() -> Result<()> {
     Ok(())
 }
 
-fn handle_deploy() -> Result<()> {
-    println!("🚀 The 'deploy' command is a stub and is NOT yet implemented in this binary.");
-    println!("💡 For real deployments use one of:");
-    println!("     make deploy-testnet                  # uses scripts/deploy.sh + stellar contract deploy");
-    println!("     bash scripts/deploy.sh testnet       # ditto, direct script invocation");
-    println!("        (loads $SOROBAN_ADMIN_SECRET_KEY from .env, deploys the WASM at");
-    println!("         target/wasm32v1-none/release/milestonex_core.wasm to testnet)");
-    println!("     stellar contract deploy \\");
-    println!("         --wasm target/wasm32v1-none/release/milestonex_core.wasm \\");
-    println!("         --source \"$SOROBAN_ADMIN_SECRET_KEY\" --network testnet      # native fallback");
-    println!("⚠️  Note: the deploy scripts currently ship the legacy `milestonex-core`");
-    println!("    binary even though `milestonex-campaign` is canonical (see README).");
-    println!("🔗 Tracked in: https://github.com/MillestoneX/MilestoneX-Contracts/issues/37");
+fn handle_deploy(args: &[String]) -> Result<()> {
+    let mut dry_run = false;
+    let mut source_override: Option<String> = None;
+    let mut fee_override: Option<String> = None;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--dry-run" => dry_run = true,
+            "--source" => {
+                i += 1;
+                source_override = Some(
+                    args.get(i)
+                        .cloned()
+                        .context("--source requires a value (key name or secret key)")?,
+                );
+            }
+            "--fee" => {
+                i += 1;
+                fee_override = Some(
+                    args.get(i)
+                        .cloned()
+                        .context("--fee requires a numeric value")?,
+                );
+            }
+            other => anyhow::bail!("Unknown deploy flag: {other}"),
+        }
+        i += 1;
+    }
+
+    let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+
+    let source = match source_override {
+        Some(ref key_name) => key_name.clone(),
+        None => env::var("SOROBAN_ADMIN_SECRET_KEY")
+            .context("SOROBAN_ADMIN_SECRET_KEY not set. Provide --source <key_name> or set the env var")?,
+    };
+
+    let config = EnvironmentConfig::from_env()?;
+    let active = config.get_active_network()?;
+
+    let rpc_url = env::var("SOROBAN_RPC_URL").unwrap_or(active.rpc_url);
+    let passphrase = env::var("SOROBAN_NETWORK_PASSPHRASE").unwrap_or(active.network_passphrase);
+
+    let wasm_dir = "target/wasm32v1-none/release";
+    let canonical_path = format!("{wasm_dir}/milestonex_campaign.wasm");
+    let legacy_path = format!("{wasm_dir}/milestonex_core.wasm");
+
+    let wasm_path = if Path::new(&canonical_path).exists() {
+        canonical_path
+    } else if Path::new(&legacy_path).exists() {
+        legacy_path
+    } else {
+        anyhow::bail!(
+            "WASM not found at {canonical_path} or {legacy_path} — run 'make build-wasm' first"
+        );
+    };
+
+    let deployments_dir = "deployments";
+    let deployment_file = format!("{deployments_dir}/{network}.json");
+
+    if Path::new(&deployment_file).exists() {
+        let content = fs::read_to_string(&deployment_file)?;
+        if let Ok(record) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(id) = record.get("contract_id").and_then(|v| v.as_str()) {
+                if !id.is_empty() {
+                    println!("ℹ️  Contract already deployed on {network}: {id}");
+                    println!("   Delete {deployment_file} to force a re-deploy.");
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    if dry_run {
+        println!("🚀 Dry-run: would deploy to {network}");
+        println!("   WASM: {wasm_path}");
+        println!("   Source: {source}");
+        println!("   RPC: {rpc_url}");
+        if let Some(ref fee) = fee_override {
+            println!("   Fee: {fee}");
+        }
+        return Ok(());
+    }
+
+    let mut cmd = Command::new("stellar");
+    cmd.arg("contract")
+        .arg("deploy")
+        .arg("--wasm")
+        .arg(&wasm_path)
+        .arg("--source")
+        .arg(&source)
+        .arg("--rpc-url")
+        .arg(&rpc_url)
+        .arg("--network-passphrase")
+        .arg(&passphrase);
+
+    if let Some(ref fee) = fee_override {
+        cmd.arg("--fee").arg(fee);
+    }
+
+    println!("🚀 Deploying to {network}...");
+    println!("   RPC: {rpc_url}");
+    println!("   WASM: {wasm_path}");
+
+    let output = cmd
+        .output()
+        .context("Failed to execute 'stellar contract deploy'. Is stellar-cli installed?")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Deployment failed:\n{stderr}");
+    }
+
+    let contract_id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    println!("✅ Contract deployed!");
+    println!("📝 Contract ID: {contract_id}");
+
+    fs::create_dir_all(deployments_dir)?;
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    let record = serde_json::json!({
+        "network": network,
+        "contract_id": contract_id,
+        "rpc_url": rpc_url,
+        "deployed_at": timestamp,
+        "wasm": wasm_path,
+    });
+
+    let json = serde_json::to_string_pretty(&record)?;
+    fs::write(&deployment_file, &json)?;
+    println!("💾 Deployment record saved to {deployment_file}");
+
+    fs::write(".milestonex_contract_id", &contract_id)?;
+    println!("✅ Contract ID stored in .milestonex_contract_id");
+
     Ok(())
 }
 
