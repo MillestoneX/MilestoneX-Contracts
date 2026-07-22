@@ -20,15 +20,17 @@ use soroban_sdk::{panic_with_error, Env};
 /// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
 /// - `Error::InvalidCampaignTransition` if campaign is already Ended or Cancelled
 pub fn end_campaign(env: &Env) {
+    // Freeze check — reject all mutating operations while frozen.
+    // Must precede require_auth() so the freeze invariant short-circuits
+    // before any auth work is consumed.
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
+
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
-
-    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
-    if is_frozen(env) {
-        panic_with_error!(env, Error::ContractFrozen);
-    }
 
     validate_campaign_transition(env, &campaign.status, &CampaignStatus::Ended)
         .unwrap_or_else(|e| panic_with_error!(env, e));
@@ -51,15 +53,17 @@ pub fn end_campaign(env: &Env) {
 /// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
 /// - `Error::InvalidCampaignTransition` if campaign is already Cancelled
 pub fn cancel_campaign(env: &Env) {
+    // Freeze check — reject all mutating operations while frozen.
+    // Must precede require_auth() so the freeze invariant short-circuits
+    // before any auth work is consumed.
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
+
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
-
-    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
-    if is_frozen(env) {
-        panic_with_error!(env, Error::ContractFrozen);
-    }
 
     validate_campaign_transition(env, &campaign.status, &CampaignStatus::Cancelled)
         .unwrap_or_else(|e| panic_with_error!(env, e));
@@ -87,15 +91,17 @@ pub fn cancel_campaign(env: &Env) {
 /// - `Error::InvalidEndTime` if `new_end_time` is more than ten years out
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
 pub fn extend_deadline(env: &Env, new_end_time: u64) {
+    // Freeze check — reject all mutating operations while frozen.
+    // Must precede require_auth() so the freeze invariant short-circuits
+    // before any auth work is consumed.
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
+
     let mut campaign =
         get_campaign(env).unwrap_or_else(|| panic_with_error!(env, Error::NotInitialized));
 
     campaign.creator.require_auth();
-
-    // Freeze invariant: all write operations are rejected while frozen (see freeze()).
-    if is_frozen(env) {
-        panic_with_error!(env, Error::ContractFrozen);
-    }
 
     match campaign.status {
         CampaignStatus::Active | CampaignStatus::GoalReached => {}

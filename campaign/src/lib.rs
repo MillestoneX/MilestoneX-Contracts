@@ -167,13 +167,15 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
-        // Issue #243 – Authorization check
-        donor.require_auth();
-
         // Freeze check — reject all mutating operations while frozen
+        // Must precede require_auth() so the freeze invariant short-circuits
+        // before any auth work is consumed.
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
+
+        // Issue #243 – Authorization check
+        donor.require_auth();
 
         let mut campaign: CampaignData =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
@@ -394,13 +396,15 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
-        // Issue #243 – Authorization check
-        donor.require_auth();
-
         // Freeze check — reject all mutating operations while frozen
+        // Must precede require_auth() so the freeze invariant short-circuits
+        // before any auth work is consumed.
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
+
+        // Issue #243 – Authorization check
+        donor.require_auth();
 
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
@@ -524,6 +528,13 @@ impl CampaignContract {
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone(env: Env, milestone_index: u32, recipient: Address) {
+        // Freeze check — reject all mutating operations while frozen.
+        // Must precede require_auth() so the freeze invariant short-circuits
+        // before any auth work is consumed.
+        if is_frozen(&env) {
+            panic_with_error(&env, Error::ContractFrozen);
+        }
+
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
         let campaign =
@@ -538,6 +549,13 @@ impl CampaignContract {
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone_multi_asset(env: Env, milestone_index: u32, recipient: Address) {
+        // Freeze check — reject all mutating operations while frozen.
+        // Must precede require_auth() so the freeze invariant short-circuits
+        // before any auth work is consumed.
+        if is_frozen(&env) {
+            panic_with_error(&env, Error::ContractFrozen);
+        }
+
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
         let campaign =
@@ -574,15 +592,17 @@ impl CampaignContract {
     /// - `Error::NotInitialized` if campaign not yet initialized
     /// - `Error::ContractFrozen` if the contract is currently frozen
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
+        // Freeze check — reject all mutating operations while frozen.
+        // Must precede require_auth() so the freeze invariant short-circuits
+        // before any auth work is consumed.
+        if is_frozen(&env) {
+            panic_with_error(&env, Error::ContractFrozen);
+        }
+
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
-
-        // Freeze check — consistent with donate(), claim_refund(), and release_milestone()
-        if is_frozen(&env) {
-            panic_with_error(&env, Error::ContractFrozen);
-        }
 
         // Actually deploy the new WASM hash to the contract
         env.deployer()

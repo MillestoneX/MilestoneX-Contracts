@@ -1,6 +1,6 @@
 use crate::event;
 use crate::storage::{
-    acquire_lock, get_campaign, get_milestone, release_lock, set_milestone,
+    acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone,
     storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
     storage_set_asset_raised, storage_set_total_raised,
 };
@@ -69,6 +69,12 @@ fn compute_asset_release(
 pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient: Address) {
     // Issue #242 – Reentrancy protection: acquire lock
     acquire_lock(env);
+
+    // Freeze check — defense-in-depth; the #[contractimpl] wrapper also gates
+    // on is_frozen before require_auth.
+    if is_frozen(env) {
+        panic_with_error!(env, Error::ContractFrozen);
+    }
 
     // ── 1. Load campaign ────────────────────────────────────────────────────
     let campaign =

@@ -11,7 +11,8 @@ use soroban_sdk::{Address, BytesN, Env, String, Vec};
 use super::with_contract;
 use crate::storage::{get_campaign, set_campaign, set_donor, set_milestone};
 use crate::types::{
-    AssetInfo, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus, StellarAsset,
+    AssetInfo, CampaignData, CampaignStatus, DonorRecord, MilestoneData, MilestoneStatus,
+    StellarAsset,
 };
 use crate::CampaignContractClient;
 use crate::{CampaignContract, MAX_DEADLINE_GAP_SECONDS};
@@ -1061,6 +1062,64 @@ fn test_cancel_then_refund_eligible() {
 }
 
 // ─── Freeze invariant regression tests ───────────────────────────────────────
+
+/// Issue #10: freeze check must fire before require_auth(), rejecting a
+/// `release_milestone` call without consuming the auth frame.
+///
+/// The test does NOT call `mock_all_auths()`. If the freeze check correctly
+/// precedes `require_auth()` in the wrapper, the panic will be `ContractFrozen`
+/// (#80) instead of a host-level auth error. Conversely, if `require_auth()`
+/// runs first, the host would panic with `HostError` (auth failure) before
+/// reaching the freeze check — marking a regression.
+#[test]
+#[should_panic(expected = "Error(Contract, #80)")]
+fn test_release_frozen_no_auth() {
+    let env = make_env();
+    env.ledger().set_timestamp(BASE);
+    // Deliberately NO mock_all_auths() — the freeze check must short-circuit
+    // before require_auth() would fail.
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        let token_admin = Address::generate(&env);
+        let token_address = env.register_stellar_asset_contract(token_admin);
+        let mut assets: Vec<StellarAsset> = Vec::new(&env);
+        assets.push_back(StellarAsset {
+            asset_code: String::from_str(&env, "XLM"),
+            issuer: Some(token_address),
+        });
+        let campaign = CampaignData {
+            creator: creator.clone(),
+            goal_amount: 3000,
+            raised_amount: 3000,
+            end_time: env.ledger().timestamp() + 86_400,
+            status: CampaignStatus::Active,
+            accepted_assets: assets,
+            milestone_count: 1,
+            min_donation_amount: 0,
+            created_at_ledger: env.ledger().sequence(),
+            created_at_time: env.ledger().timestamp(),
+            concluded_at_ledger: None,
+        };
+        set_campaign(&env, &campaign);
+        let milestone = MilestoneData {
+            index: 0,
+            target_amount: 3000,
+            released_amount: 0,
+            description_hash: BytesN::from_array(&env, &[0u8; 32]),
+            status: MilestoneStatus::Unlocked,
+            released_at: None,
+            released_at_ledger: None,
+            release_tx: None,
+            released_to: None,
+        };
+        set_milestone(&env, 0, &milestone);
+
+        crate::storage::set_frozen(&env, true);
+
+        let recipient = Address::generate(&env);
+        CampaignContract::release_milestone(env.clone(), 0, recipient);
+    });
+}
 
 #[test]
 #[should_panic]
