@@ -8,7 +8,8 @@ use soroban_sdk::{panic_with_error, token, Address, Env};
 
 /// Issue #207 – `release_milestone` function
 ///
-/// Releases funds for an unlocked milestone to the recipient.
+/// Releases funds for an unlocked milestone to the recipient using the primary
+/// (first) accepted asset only.
 ///
 /// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
 /// verified `creator.require_auth()` before calling this function.
@@ -16,13 +17,22 @@ use soroban_sdk::{panic_with_error, token, Address, Env};
 /// Validates milestone status is `Unlocked`.
 /// Prevents double release — `Released` milestones panic with `MilestoneAlreadyReleased`.
 /// Prevents skipping milestones — previous milestone must be Released.
-/// Transfers tokens from the campaign's primary (first) accepted asset to recipient.
+/// Transfers the full release amount from the campaign's primary (first) accepted asset
+/// to the recipient.
 /// Sets milestone status to `Released`.
 /// Emits `milestone_released` event.
 /// Respects the freeze flag — panics with `ContractFrozen` if frozen.
+/// Rejects multi-asset campaigns — panics with `UseMultiAssetRelease` so the caller
+/// routes to `release_milestone_multi_asset`.
 ///
-/// For campaigns accepting multiple assets, use `release_milestone_multi_asset`
-/// instead, which distributes the release proportionally across all assets.
+/// ## Use
+///
+/// ## Single-asset vs multi-asset
+///
+/// - Single-asset release: when the campaign accepts exactly one asset (`accepted_assets.len() == 1`). This is the legacy fast path; it transfers the milestone delta in full.
+/// - Multi-asset release: when the campaign accepts more than one asset. This proportionally distributes across all assets.
+///
+/// Calling the wrong one is unidiomatic and will be rejected.
 ///
 /// ## Security
 ///
@@ -35,6 +45,7 @@ use soroban_sdk::{panic_with_error, token, Address, Env};
 /// - `Error::InvalidMilestoneTransition` if milestone is not `Unlocked`
 /// - `Error::PreviousMilestoneNotReleased` if a prior milestone is not yet Released
 /// - `Error::MilestoneAlreadyReleased` if milestone is already in Released state
+/// - `Error::UseMultiAssetRelease` if the campaign accepts more than one asset
 /// - `Error::InsufficientContractBalance` if contract lacks funds for transfer
 /// - `Error::ContractFrozen` if contract is frozen
 pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
@@ -47,6 +58,11 @@ pub fn release_milestone(env: &Env, milestone_index: u32, recipient: Address) {
     // Freeze check — reject all mutating operations while frozen
     if is_frozen(env) {
         soroban_sdk::panic_with_error!(env, Error::ContractFrozen);
+    }
+
+    // Multi-asset campaigns must use the proportional release path.
+    if campaign.accepted_assets.len() > 1 {
+        panic_with_error!(env, Error::UseMultiAssetRelease);
     }
 
     let mut milestone = get_milestone(env, milestone_index)

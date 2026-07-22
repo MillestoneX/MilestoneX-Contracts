@@ -518,7 +518,7 @@ impl CampaignContract {
         contract::get_campaign_status(&env)
     }
 
-    /// Issue #207 – Release a single milestone (all assets proportionally).
+    /// Issue #207 – Release a single milestone (from the primary accepted asset).
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `creator.require_auth()`.
@@ -533,6 +533,16 @@ impl CampaignContract {
     }
 
     /// Issue #208 – Multi-asset milestone release with proportional distribution.
+    ///
+    /// Use `release_milestone_multi_asset` for multi-asset campaigns and
+    /// `release_milestone` for single-asset campaigns.
+    ///
+    /// ## Single-asset vs multi-asset
+    ///
+    /// - Single-asset release: when the campaign accepts exactly one asset (`accepted_assets.len() == 1`). This is the legacy fast path; it transfers the milestone delta in full.
+    /// - Multi-asset release: when the campaign accepts more than one asset. This proportionally distributes across all assets.
+    ///
+    /// Calling the wrong one is unidiomatic and will be rejected.
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `creator.require_auth()`.
