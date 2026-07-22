@@ -12,7 +12,7 @@
 
 .PHONY: build build-wasm build-tools test fmt fmt-tools lint lint-tools lint-schema all-lint \
         clean optimize help setup deploy-testnet deploy-sandbox sandbox-start \
-        audit deny
+        audit deny wire-test
 
 # Default target
 build: build-wasm build-tools
@@ -143,6 +143,17 @@ deny:
 	@echo "📋 Checking license compliance..."
 	cargo deny check
 	@echo "✅ License check passed"
+
+# Wire-format snapshot validation — ensures the on-chain error-code
+# representation has not drifted from the committed fixture.
+# Regenerate the fixture with:
+#   cargo test -p milestonex-campaign update_wire_fixture  # (future helper)
+# Or just paste the output of `cargo test campaign_error_discriminants_are_unique`
+# into campaign/test_snapshots/wire_code_fixture.txt.
+wire-test:
+	@echo "🔌 Validating error-code wire-format snapshot..."
+	cargo test -p milestonex-campaign -- wire_code_table_matches_fixture
+	@echo "✅ Wire-format snapshot matches fixture"
 
 # Optimize WASM binaries using wasm-opt (-Oz)
 optimize: build

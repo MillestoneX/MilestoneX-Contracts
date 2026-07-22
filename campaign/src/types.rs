@@ -119,59 +119,126 @@ pub enum Error {
 /// Maximum number of milestones returned per page for `get_milestones_page`.
 pub const MAX_PAGE_SIZE: u32 = 10;
 
+// ─── Wire-format helpers ──────────────────────────────────────────────────────
+
+impl Error {
+    /// Returns the stable on-chain wire code for this error variant.
+    ///
+    /// The returned `u32` is the same discriminant that `#[contracterror]` maps
+    /// to `Error(Contract, #N)` in the transaction result.  Off-chain indexers
+    /// and SDK consumers should prefer this method over raw `as u32` casts,
+    /// which are technically valid but harder to audit across dependency bumps.
+    pub fn as_wire_code(self) -> u32 {
+        self as u32
+    }
+}
+
+/// Canonical wire-code table for every variant of `Error`.
+///
+/// Each entry maps a typed error variant to its stable on-chain wire code.
+/// Indexers can regenerate lookup tables deterministically from this const.
+/// Entries are sorted by wire code to enable binary search and diff-friendly
+/// review.
+pub const WIRE_CODE_TABLE: &[(Error, u32)] = &[
+    (Error::AlreadyInitialized, 1),
+    (Error::NotInitialized, 2),
+    (Error::Unauthorized, 3),
+    (Error::CampaignEnded, 4),
+    (Error::CampaignNotActive, 5),
+    (Error::AssetNotAccepted, 6),
+    (Error::DonationTooSmall, 7),
+    (Error::MilestoneNotFound, 8),
+    (Error::MilestoneNotUnlocked, 9),
+    (Error::PreviousMilestoneNotReleased, 10),
+    (Error::CannotCancelWithFunds, 11),
+    (Error::RefundWindowClosed, 12),
+    (Error::InvalidGoalAmount, 13),
+    (Error::InvalidEndTime, 14),
+    (Error::InvalidMilestones, 15),
+    (Error::InsufficientContractBalance, 16),
+    (Error::Overflow, 17),
+    (Error::InvalidAssets, 18),
+    (Error::InvalidAssetCode, 19),
+    (Error::MilestoneMismatch, 20),
+    (Error::InvalidMilestoneCount, 21),
+    (Error::InvalidCampaignTransition, 22),
+    (Error::InvalidMilestoneTransition, 23),
+    (Error::GoalNotReached, 24),
+    (Error::InvalidStorageValue, 25),
+    (Error::StorageWriteError, 26),
+    (Error::InvalidRecipient, 30),
+    (Error::MissingIssuerAddress, 31),
+    (Error::ZeroReleaseAmount, 32),
+    (Error::NothingToRelease, 33),
+    (Error::MilestoneReleasedExceedsTarget, 34),
+    (Error::MilestoneAlreadyReleased, 40),
+    (Error::UnreleasedMilestonesExist, 41),
+    (Error::RefundNotPermitted, 50),
+    (Error::NoDonorRecord, 51),
+    (Error::RefundAlreadyClaimed, 52),
+    (Error::ReentrantCall, 60),
+    (Error::InvalidAmount, 70),
+    (Error::ContractFrozen, 80),
+    (Error::InvalidPage, 84),
+];
+
 #[cfg(test)]
 mod error_code_tests {
-    use super::Error;
     #[test]
-    fn campaign_error_discriminants_are_unique_without_common_error_space() {
-        // `milestonex-common` intentionally exposes no `#[contracterror]` enum;
-        // this guards the remaining campaign-local error space against internal
-        // duplicate discriminants while preserving the stable on-chain codes.
-        let campaign_codes = [
-            Error::AlreadyInitialized as u32,
-            Error::NotInitialized as u32,
-            Error::Unauthorized as u32,
-            Error::CampaignEnded as u32,
-            Error::CampaignNotActive as u32,
-            Error::AssetNotAccepted as u32,
-            Error::DonationTooSmall as u32,
-            Error::MilestoneNotFound as u32,
-            Error::MilestoneNotUnlocked as u32,
-            Error::PreviousMilestoneNotReleased as u32,
-            Error::CannotCancelWithFunds as u32,
-            Error::RefundWindowClosed as u32,
-            Error::InvalidGoalAmount as u32,
-            Error::InvalidEndTime as u32,
-            Error::InvalidMilestones as u32,
-            Error::InsufficientContractBalance as u32,
-            Error::Overflow as u32,
-            Error::InvalidAssets as u32,
-            Error::InvalidAssetCode as u32,
-            Error::MilestoneMismatch as u32,
-            Error::InvalidMilestoneCount as u32,
-            Error::InvalidCampaignTransition as u32,
-            Error::InvalidMilestoneTransition as u32,
-            Error::GoalNotReached as u32,
-            Error::InvalidStorageValue as u32,
-            Error::StorageWriteError as u32,
-            Error::InvalidRecipient as u32,
-            Error::MissingIssuerAddress as u32,
-            Error::ZeroReleaseAmount as u32,
-            Error::NothingToRelease as u32,
-            Error::MilestoneReleasedExceedsTarget as u32,
-            Error::MilestoneAlreadyReleased as u32,
-            Error::UnreleasedMilestonesExist as u32,
-            Error::RefundNotPermitted as u32,
-            Error::NoDonorRecord as u32,
-            Error::RefundAlreadyClaimed as u32,
-            Error::ReentrantCall as u32,
-            Error::InvalidAmount as u32,
-            Error::ContractFrozen as u32,
-            Error::InvalidPage as u32,
-        ];
-        for (index, code) in campaign_codes.iter().enumerate() {
-            assert!(!campaign_codes[index + 1..].contains(code));
+    fn campaign_error_discriminants_are_unique() {
+        let codes = super::WIRE_CODE_TABLE;
+        for (index, (_, code)) in codes.iter().enumerate() {
+            assert!(
+                !codes[index + 1..].iter().any(|(_, c)| c == code),
+                "Duplicate wire code {} at index {}",
+                code,
+                index,
+            );
         }
+    }
+
+    #[test]
+    fn as_wire_code_matches_table() {
+        for (variant, expected_code) in super::WIRE_CODE_TABLE {
+            let actual = variant.as_wire_code();
+            assert_eq!(
+                actual, *expected_code,
+                "as_wire_code() mismatch for {:?}: expected {}, got {}",
+                variant, expected_code, actual,
+            );
+        }
+    }
+
+    #[test]
+    fn wire_code_table_is_sorted() {
+        let codes = super::WIRE_CODE_TABLE;
+        for i in 1..codes.len() {
+            assert!(
+                codes[i - 1].1 <= codes[i].1,
+                "WIRE_CODE_TABLE not sorted at index {}: {} > {}",
+                i,
+                codes[i - 1].1,
+                codes[i].1,
+            );
+        }
+    }
+
+    #[test]
+    fn wire_code_table_matches_fixture() {
+        extern crate alloc;
+        let actual = super::WIRE_CODE_TABLE
+            .iter()
+            .map(|(variant, code)| alloc::format!("{:?} -> {}", variant, code))
+            .collect::<alloc::vec::Vec<_>>()
+            .join("\n");
+        let expected = include_str!("../test_snapshots/wire_code_fixture.txt");
+        assert_eq!(
+            actual.trim(),
+            expected.trim(),
+            "WIRE_CODE_TABLE snapshot mismatch — regenerate with: \
+             cargo test -p milestonex-campaign update_wire_fixture 2>/dev/null || true; \
+             cp campaign/src/test/wire_format_actual.txt campaign/test_snapshots/wire_code_fixture.txt",
+        );
     }
 }
 
