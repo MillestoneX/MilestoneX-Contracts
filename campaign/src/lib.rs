@@ -819,6 +819,7 @@ pub fn validate_milestone_transition(
 
 #[cfg(test)]
 mod test {
+    pub mod budget_invariant_tests;
     pub mod claim_refund_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
@@ -836,6 +837,45 @@ mod test {
     {
         let contract_id = env.register_contract(None, crate::CampaignContract);
         env.as_contract(&contract_id, f)
+    }
+
+    /// Runs `f` inside the contract context and asserts that the Soroban
+    /// resource budget (CPU instructions and memory) stays below the given
+    /// thresholds.
+    ///
+    /// The budget is reset to unlimited before `f` runs, so the measured
+    /// values reflect the true cost of the operation rather than the default
+    /// test budget.
+    ///
+    /// # Panics
+    /// Panics with a descriptive message containing `label` if either
+    /// `cpu_instruction_cost()` ≥ `cpu_max` or `memory_bytes_cost()` ≥ `mem_max`.
+    pub(crate) fn assert_budget_under(
+        env: &soroban_sdk::Env,
+        label: &str,
+        cpu_max: u64,
+        mem_max: u64,
+        f: impl FnOnce(),
+    ) {
+        let mut budget = env.cost_estimate().budget();
+        budget.reset_unlimited();
+        f();
+        let cpu = budget.cpu_instruction_cost();
+        let mem = budget.memory_bytes_cost();
+        assert!(
+            cpu < cpu_max,
+            "Budget regression (CPU): {} used {} cpu instructions, expected < {}",
+            label,
+            cpu,
+            cpu_max,
+        );
+        assert!(
+            mem < mem_max,
+            "Budget regression (Memory): {} used {} memory bytes, expected < {}",
+            label,
+            mem,
+            mem_max,
+        );
     }
 }
 
