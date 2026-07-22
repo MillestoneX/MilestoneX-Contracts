@@ -252,13 +252,17 @@ mod error_code_tests {
             .join("\n");
         let expected = include_str!("../test_snapshots/wire_code_fixture.txt");
         assert_eq!(
-            actual.trim(),
-            expected.trim(),
+            actual.trim().replace("\r\n", "\n"),
+            expected.trim().replace("\r\n", "\n"),
             "WIRE_CODE_TABLE snapshot mismatch — regenerate with: \
              cargo test -p milestonex-campaign update_wire_fixture 2>/dev/null || true; \
              cp campaign/src/test/wire_format_actual.txt campaign/test_snapshots/wire_code_fixture.txt",
         );
+    }
+
+    #[test]
     fn campaign_error_discriminants_are_unique_without_common_error_space() {
+        use super::Error;
         // `milestonex-common` intentionally exposes no `#[contracterror]` enum;
         // this guards the remaining campaign-local error space against internal
         // duplicate discriminants while preserving the stable on-chain codes.
