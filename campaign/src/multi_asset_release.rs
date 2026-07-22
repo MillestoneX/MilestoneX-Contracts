@@ -4,6 +4,9 @@ use crate::storage::{
     storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
     storage_set_asset_raised, storage_set_total_raised,
 };
+#[cfg(feature = "diag")]
+use crate::storage::storage_increment_diagnostic_counter;
+use crate::types::CampaignMetrics;
 use crate::types::{Error, MilestoneStatus};
 use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env};
 
@@ -197,6 +200,10 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
     let new_total_raised = total_raised.checked_sub(total_released).unwrap_or(0).max(0);
     storage_set_total_raised(env, new_total_raised);
     storage_increment_release_count(env);
+    #[cfg(feature = "diag")]
+    storage_increment_diagnostic_counter(env, |m: &mut CampaignMetrics| {
+        m.milestones_released_total += 1;
+    });
 
     // Issue #242 – Release reentrancy lock
     release_lock(env);

@@ -182,6 +182,22 @@ pub const WIRE_CODE_TABLE: &[(Error, u32)] = &[
     (Error::InvalidPage, 84),
 ];
 
+/// Diagnostic counters for the campaign contract.
+///
+/// Only populated when the `diag` feature is enabled. The `metrics_view`
+/// entrypoint always exists but returns all zeros when the feature is off.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
+pub struct CampaignMetrics {
+    /// Total number of successful donation calls.
+    pub donations_total: u64,
+    /// Total number of completed milestone releases.
+    pub milestones_released_total: u64,
+    /// Total number of successfully processed refunds.
+    pub refunds_total: u64,
+    /// Ledger sequence when diagnostics were last emitted.
+    pub last_diagnostics_ledger: u32,
+}
 #[cfg(test)]
 mod error_code_tests {
     #[test]
@@ -375,6 +391,8 @@ pub enum DataKey {
     ReentrancyLock,
     /// Freeze flag; present and true = contract is frozen, mutating ops blocked.
     Frozen,
+    /// Diagnostic counters (only written when feature `diag` is enabled).
+    DiagnosticMetrics,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────

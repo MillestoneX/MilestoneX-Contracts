@@ -11,6 +11,10 @@ crate-type = ["cdylib", "rlib"]
 soroban-sdk = { workspace = true }
 common = { workspace = true }
 
+[features]
+default = []
+diag = []
+
 [dev-dependencies]
 soroban-sdk = { version = "26.0.1", features = ["testutils"] }
 # Inherit the workspace-wide ed25519-dalek = 2.2.0 exact pin (see

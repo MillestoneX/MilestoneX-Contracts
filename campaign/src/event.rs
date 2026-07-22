@@ -6,6 +6,8 @@
 
 use soroban_sdk::{Address, Env, String, Symbol};
 
+use crate::types::CampaignMetrics;
+
 /// Emitted when a donation is received by the campaign.
 pub fn donation_received(
     env: &Env,
@@ -99,4 +101,13 @@ pub fn contract_frozen(env: &Env, admin: &Address, timestamp: u64) {
 pub fn contract_unfrozen(env: &Env, admin: &Address, timestamp: u64) {
     env.events()
         .publish(("campaign", "contract_unfrozen"), (admin, timestamp));
+}
+
+/// Emit current diagnostic metrics as an event.
+/// Only compiled when the `diag` feature is enabled.
+#[cfg(feature = "diag")]
+pub fn diagnostics_emit(env: &Env, metrics: &CampaignMetrics) {
+    let ledger = env.ledger().sequence();
+    env.events()
+        .publish(("campaign", "diagnostics"), (metrics, ledger));
 }

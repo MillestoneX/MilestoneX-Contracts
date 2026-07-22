@@ -30,14 +30,16 @@ use storage::{
     increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
     set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
     storage_get_unique_donor_count, storage_increment_asset_raised,
-    storage_increment_donation_count, storage_increment_unique_donor_count,
-    storage_set_total_raised,
+    storage_increment_donation_count,
+    storage_increment_unique_donor_count, storage_set_total_raised,
 };
+#[cfg(feature = "diag")]
+use storage::storage_increment_diagnostic_counter;
 
 use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
-    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
-    PlatformSummary, StellarAsset,
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignMetrics, CampaignReport,
+    CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData,
+    MilestoneStatus, PlatformSummary, StellarAsset,
 };
 
 pub const VERSION: u32 = 1;
@@ -271,6 +273,12 @@ impl CampaignContract {
             env.ledger().timestamp(),
         );
 
+        // Track diagnostic counter (no-op when `diag` feature is disabled)
+        #[cfg(feature = "diag")]
+        storage_increment_diagnostic_counter(&env, |m: &mut CampaignMetrics| {
+            m.donations_total += 1;
+        });
+
         // Issue #242 – Release reentrancy lock
         release_lock(&env);
     }
@@ -325,6 +333,34 @@ impl CampaignContract {
             total_releases,
             total_transactions,
         }
+    }
+
+    /// Emit current diagnostics as a `diagnostics` event.
+    ///
+    /// When the `diag` feature is disabled the event is not published
+    /// (the function body is empty). No auth required (view-like call).
+    pub fn emit_diagnostics(env: Env) {
+        #[cfg(feature = "diag")]
+        {
+            let metrics = crate::storage::storage_get_diagnostic_metrics(&env);
+            event::diagnostics_emit(&env, &metrics);
+            let mut metrics = metrics;
+            metrics.last_diagnostics_ledger = env.ledger().sequence();
+            crate::storage::storage_set_diagnostic_metrics(&env, &metrics);
+        }
+    }
+
+    /// Returns diagnostic counters for the campaign contract.
+    ///
+    /// When the `diag` feature is disabled (default), returns all zeros.
+    /// When `diag` is enabled, returns live counters tracked in storage.
+    /// No auth required (read-only view).
+    pub fn metrics_view(env: Env) -> CampaignMetrics {
+        #[cfg(feature = "diag")]
+        {
+            return crate::storage::storage_get_diagnostic_metrics(&env);
+        }
+        CampaignMetrics::default()
     }
 
     /// Returns compact metrics for campaign dashboards.
@@ -482,6 +518,12 @@ impl CampaignContract {
                     ("campaign", "refund_claimed"),
                     (&donor, donor_record.total_donated),
                 );
+
+                // Track diagnostic counter (no-op when `diag` feature is disabled)
+                #[cfg(feature = "diag")]
+                storage_increment_diagnostic_counter(&env, |m: &mut CampaignMetrics| {
+                    m.refunds_total += 1;
+                });
 
                 // Issue #242 – Release reentrancy lock
                 release_lock(&env);
@@ -841,6 +883,7 @@ pub fn validate_milestone_transition(
 mod test {
     pub mod budget_invariant_tests;
     pub mod claim_refund_tests;
+    pub mod diagnostics_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;
