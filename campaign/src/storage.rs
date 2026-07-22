@@ -1,6 +1,8 @@
 // src/storage.rs
 
-use crate::types::{CampaignData, CampaignMetrics, DataKey, DonorRecord, Error, MilestoneData};
+#[cfg(feature = "diag")]
+use crate::types::CampaignMetrics;
+use crate::types::{CampaignData, DataKey, DonorRecord, Error, MilestoneData};
 use soroban_sdk::{panic_with_error, Address, Env};
 
 // ─── TTL Constants ────────────────────────────────────────────────────────────

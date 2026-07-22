@@ -25,16 +25,16 @@ pub mod types;
 pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+#[cfg(feature = "diag")]
+use storage::storage_increment_diagnostic_counter;
 use storage::{
     acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
     increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
     set_milestone, storage_get_donation_count, storage_get_release_count, storage_get_total_raised,
     storage_get_unique_donor_count, storage_increment_asset_raised,
-    storage_increment_donation_count,
-    storage_increment_unique_donor_count, storage_set_total_raised,
+    storage_increment_donation_count, storage_increment_unique_donor_count,
+    storage_set_total_raised,
 };
-#[cfg(feature = "diag")]
-use storage::storage_increment_diagnostic_counter;
 
 use types::{
     AssetInfo, CampaignData, CampaignInitializedEvent, CampaignMetrics, CampaignReport,
@@ -348,6 +348,8 @@ impl CampaignContract {
             metrics.last_diagnostics_ledger = env.ledger().sequence();
             crate::storage::storage_set_diagnostic_metrics(&env, &metrics);
         }
+        #[cfg(not(feature = "diag"))]
+        let _ = env;
     }
 
     /// Returns diagnostic counters for the campaign contract.
@@ -360,6 +362,8 @@ impl CampaignContract {
         {
             return crate::storage::storage_get_diagnostic_metrics(&env);
         }
+        #[cfg(not(feature = "diag"))]
+        let _ = env;
         CampaignMetrics::default()
     }
 

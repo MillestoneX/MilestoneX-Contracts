@@ -6,6 +6,7 @@
 
 use soroban_sdk::{Address, Env, String, Symbol};
 
+#[cfg(feature = "diag")]
 use crate::types::CampaignMetrics;
 
 /// Emitted when a donation is received by the campaign.

@@ -1,11 +1,12 @@
 use crate::event;
+#[cfg(feature = "diag")]
+use crate::storage::storage_increment_diagnostic_counter;
 use crate::storage::{
     acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone,
     storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
     storage_set_asset_raised, storage_set_total_raised,
 };
 #[cfg(feature = "diag")]
-use crate::storage::storage_increment_diagnostic_counter;
 use crate::types::CampaignMetrics;
 use crate::types::{Error, MilestoneStatus};
 use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env};
