@@ -225,10 +225,11 @@ mod error_code_tests {
 
     #[test]
     fn wire_code_table_matches_fixture() {
+        extern crate alloc;
         let actual = super::WIRE_CODE_TABLE
             .iter()
-            .map(|(variant, code)| std::format!("{:?} -> {}", variant, code))
-            .collect::<std::vec::Vec<_>>()
+            .map(|(variant, code)| alloc::format!("{:?} -> {}", variant, code))
+            .collect::<alloc::vec::Vec<_>>()
             .join("\n");
         let expected = include_str!("../test_snapshots/wire_code_fixture.txt");
         assert_eq!(
