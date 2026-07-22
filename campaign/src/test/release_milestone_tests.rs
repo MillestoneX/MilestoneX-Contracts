@@ -24,7 +24,9 @@ use soroban_sdk::token::StellarAssetClient;
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use super::with_contract;
-use crate::storage::{get_milestone, set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised};
+use crate::storage::{
+    get_milestone, set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised,
+};
 use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
 use crate::CampaignContractClient;
 
