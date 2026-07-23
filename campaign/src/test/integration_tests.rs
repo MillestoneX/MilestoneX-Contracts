@@ -19,12 +19,9 @@ fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<Milestone
     let creator = Address::generate(env);
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
-    // Use canonical XLM address to satisfy validation
-    let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-    let canonical_xlm = Address::from_string(&String::from_str(env, canonical_xlm_str));
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(canonical_xlm),
+        issuer: Some(Address::generate(env)),
     });
 
     let mut milestones: Vec<MilestoneData> = Vec::new(env);
@@ -241,12 +238,9 @@ fn test_lifecycle_multi_milestone_unlock() {
         let end_time = env.ledger().timestamp() + 86_400;
 
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
-        // Use canonical XLM address to satisfy validation
-        let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-        let canonical_xlm = Address::from_string(&String::from_str(&env, canonical_xlm_str));
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "XLM"),
-            issuer: Some(canonical_xlm),
+            issuer: Some(Address::generate(&env)),
         });
 
         // Three milestones: 1000, 2000, 3000
@@ -508,5 +502,43 @@ fn test_donate_uninitialized() {
     with_contract(&env, || {
         let donor = Address::generate(&env);
         CampaignContract::donate(env.clone(), donor.clone(), 100, AssetInfo::Native);
+    });
+}
+
+// ─── Deadline gate integration test (Issue #5) ────────────────────────────────
+
+/// Donate before deadline succeeds, then donate at exactly end_time fails.
+/// This test verifies the deadline gate from the positive side: a donation
+/// before the deadline is accepted. The negative paths (at/past deadline)
+/// are covered by `should_panic` tests in `negative_path_tests.rs`.
+#[test]
+fn test_lifecycle_donate_before_deadline_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let (creator, assets, milestones) = setup_basic_campaign(&env);
+        let goal_amount: i128 = 1000;
+        let end_time = env.ledger().timestamp() + 86_400; // 1 day from now
+
+        CampaignContract::initialize(
+            env.clone(),
+            creator.clone(),
+            goal_amount,
+            end_time,
+            assets.clone(),
+            milestones.clone(),
+            0,
+        )
+        .unwrap();
+
+        // Donate well before deadline → succeeds
+        let donor = Address::generate(&env);
+        CampaignContract::donate(env.clone(), donor.clone(), 500, AssetInfo::Native);
+        assert_eq!(CampaignContract::get_total_raised(env.clone()), 500);
+
+        // Verify campaign is still Active
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(campaign.status, CampaignStatus::Active);
+        assert_eq!(campaign.raised_amount, 500);
     });
 }

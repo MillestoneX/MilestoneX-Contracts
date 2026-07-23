@@ -1,7 +1,5 @@
 // src/storage.rs
 
-#[cfg(feature = "diag")]
-use crate::types::CampaignMetrics;
 use crate::types::{CampaignData, DataKey, DonorRecord, Error, MilestoneData};
 use soroban_sdk::{panic_with_error, Address, Env};
 
@@ -371,39 +369,6 @@ pub fn set_frozen(env: &Env, frozen: bool) {
     let key = DataKey::Frozen;
     env.storage().persistent().set(&key, &frozen);
     bump_persistent(env, &key);
-}
-
-// ─── Diagnostic metrics (feature-gated) ──────────────────────────────────────
-
-/// Load the diagnostic metrics counter record.
-/// Returns default (all zeros) if never written.
-#[cfg(feature = "diag")]
-pub fn storage_get_diagnostic_metrics(env: &Env) -> CampaignMetrics {
-    let value: CampaignMetrics = env
-        .storage()
-        .persistent()
-        .get(&DataKey::DiagnosticMetrics)
-        .unwrap_or_default();
-    bump_persistent(env, &DataKey::DiagnosticMetrics);
-    value
-}
-
-/// Persist the diagnostic metrics.
-#[cfg(feature = "diag")]
-pub fn storage_set_diagnostic_metrics(env: &Env, metrics: &CampaignMetrics) {
-    env.storage()
-        .persistent()
-        .set(&DataKey::DiagnosticMetrics, metrics);
-    bump_persistent(env, &DataKey::DiagnosticMetrics);
-}
-
-/// Increment a diagnostic counter in storage.
-/// No-op when the `diag` feature is disabled (the function body is not compiled).
-#[cfg(feature = "diag")]
-pub fn storage_increment_diagnostic_counter(env: &Env, field: fn(&mut CampaignMetrics)) {
-    let mut metrics = storage_get_diagnostic_metrics(env);
-    field(&mut metrics);
-    storage_set_diagnostic_metrics(env, &metrics);
 }
 
 // ─── Bulk TTL refresh ─────────────────────────────────────────────────────────

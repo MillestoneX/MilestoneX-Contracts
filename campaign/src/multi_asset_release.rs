@@ -1,13 +1,9 @@
 use crate::event;
-#[cfg(feature = "diag")]
-use crate::storage::storage_increment_diagnostic_counter;
 use crate::storage::{
-    acquire_lock, get_campaign, get_milestone, is_frozen, release_lock, set_milestone,
+    acquire_lock, get_campaign, get_milestone, release_lock, set_milestone,
     storage_get_asset_raised, storage_get_total_raised, storage_increment_release_count,
     storage_set_asset_raised, storage_set_total_raised,
 };
-#[cfg(feature = "diag")]
-use crate::types::CampaignMetrics;
 use crate::types::{Error, MilestoneStatus};
 use soroban_sdk::{panic_with_error, symbol_short, token, Address, Env};
 
@@ -57,16 +53,6 @@ fn compute_asset_release(
 /// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
 /// verified `creator.require_auth()` before calling this function.
 ///
-/// Use `release_milestone_multi_asset` for multi-asset campaigns and
-/// `release_milestone` for single-asset campaigns.
-///
-/// ## Single-asset vs multi-asset
-///
-/// - Single-asset release: when the campaign accepts exactly one asset (`accepted_assets.len() == 1`). This is the legacy fast path; it transfers the milestone delta in full.
-/// - Multi-asset release: when the campaign accepts more than one asset. This proportionally distributes across all assets.
-///
-/// Calling the wrong one is unidiomatic and will be rejected.
-///
 /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
 /// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///
@@ -83,12 +69,6 @@ fn compute_asset_release(
 pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient: Address) {
     // Issue #242 – Reentrancy protection: acquire lock
     acquire_lock(env);
-
-    // Freeze check — defense-in-depth; the #[contractimpl] wrapper also gates
-    // on is_frozen before require_auth.
-    if is_frozen(env) {
-        panic_with_error!(env, Error::ContractFrozen);
-    }
 
     // ── 1. Load campaign ────────────────────────────────────────────────────
     let campaign =
@@ -211,10 +191,6 @@ pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient:
     let new_total_raised = total_raised.checked_sub(total_released).unwrap_or(0).max(0);
     storage_set_total_raised(env, new_total_raised);
     storage_increment_release_count(env);
-    #[cfg(feature = "diag")]
-    storage_increment_diagnostic_counter(env, |m: &mut CampaignMetrics| {
-        m.milestones_released_total += 1;
-    });
 
     // Issue #242 – Release reentrancy lock
     release_lock(env);

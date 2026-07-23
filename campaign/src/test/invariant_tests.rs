@@ -382,3 +382,90 @@ fn apply_donation_overflow_donation_count_panics() {
         record.apply_donation(&env, 1, BASE, 1, asset_info);
     });
 }
+
+/// INVARIANT 6 (Issue #5): `donate` must always fail when `now >= end_time`,
+/// regardless of whether status is `Active` or `GoalReached`.
+///
+/// This invariant is verified by the `should_panic` tests in
+/// `negative_path_tests.rs` (`test_donate_fails_past_deadline_active`,
+/// `test_donate_fails_past_deadline_goal_reached`,
+/// `test_donate_fails_at_exact_deadline_boundary`). This test provides the
+/// positive companion: a donation before the deadline in both Active and
+/// GoalReached states must succeed, proving the gate is precise (not
+/// over-blocking valid donations).
+#[test]
+fn invariant_donate_before_deadline_always_succeeds() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+
+    // Case A: Active campaign before deadline — donate succeeds
+    with_contract(&env, || {
+        let goal: i128 = 1000;
+        let token_issuer =
+            setup_campaign_with_milestones(&env, goal, 0, CampaignStatus::Active, &[1000]);
+
+        // BASE + 86_400 is the end_time (set in setup_campaign_with_milestones)
+        // Current timestamp is BASE, so we are before the deadline
+        let donor = Address::generate(&env);
+        crate::CampaignContract::donate(
+            env.clone(),
+            donor,
+            100,
+            crate::types::AssetInfo::Stellar(token_issuer),
+        );
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(
+            campaign.raised_amount, 100,
+            "Donation before deadline should succeed in Active state"
+        );
+    });
+
+    // Case B: GoalReached campaign before deadline — donate succeeds
+    with_contract(&env, || {
+        let goal: i128 = 1000;
+        let token_issuer =
+            setup_campaign_with_milestones(&env, goal, 1000, CampaignStatus::GoalReached, &[1000]);
+
+        let donor = Address::generate(&env);
+        crate::CampaignContract::donate(
+            env.clone(),
+            donor,
+            100,
+            crate::types::AssetInfo::Stellar(token_issuer),
+        );
+        let campaign = get_campaign(&env).unwrap();
+        assert_eq!(
+            campaign.raised_amount, 1100,
+            "Donation before deadline should succeed in GoalReached state"
+        );
+    });
+}
+
+/// INVARIANT 6b (Issue #5): `donate` must always fail when `now >= end_time`,
+/// regardless of whether status is `Active` or `GoalReached`.
+///
+/// This is the negative companion to `invariant_donate_before_deadline_always_succeeds`.
+/// It directly asserts the invariant `donate(clk >= end_time).is_err()` by
+/// panicking with `Error::CampaignEnded` (#4) when the ledger timestamp
+/// has reached or passed `end_time`.
+#[test]
+#[should_panic(expected = "Error(Contract, #4)")]
+fn invariant_donate_at_or_past_deadline_always_fails() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+
+    with_contract(&env, || {
+        let goal: i128 = 1000;
+        let _token_issuer =
+            setup_campaign_with_milestones(&env, goal, 0, CampaignStatus::Active, &[1000]);
+
+        // end_time = BASE + 86_400 (set in setup_campaign_with_milestones).
+        // Advance ledger to exactly end_time — `>=` means this must fail.
+        env.ledger().set_timestamp(BASE + 86_400);
+
+        let donor = Address::generate(&env);
+        crate::CampaignContract::donate(env.clone(), donor, 100, crate::types::AssetInfo::Native);
+    });
+}

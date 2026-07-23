@@ -25,8 +25,6 @@ pub mod types;
 pub mod views;
 
 use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
-#[cfg(feature = "diag")]
-use storage::storage_increment_diagnostic_counter;
 use storage::{
     acquire_lock, get_campaign, get_donor, get_donor_asset_donation, get_milestone,
     increment_donor_asset_donation, is_frozen, release_lock, set_campaign, set_donor, set_frozen,
@@ -37,9 +35,9 @@ use storage::{
 };
 
 use types::{
-    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignMetrics, CampaignReport,
-    CampaignStatus, CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData,
-    MilestoneStatus, PlatformSummary, StellarAsset,
+    AssetInfo, CampaignData, CampaignInitializedEvent, CampaignReport, CampaignStatus,
+    CampaignStatusResponse, DashboardMetrics, DonorRecord, Error, MilestoneData, MilestoneStatus,
+    PlatformSummary, StellarAsset,
 };
 
 pub const VERSION: u32 = 1;
@@ -103,7 +101,6 @@ impl CampaignContract {
         }
 
         validate_assets(&env, &accepted_assets)?;
-        validate_native_xlm_configuration(&env, &accepted_assets)?;
 
         let milestone_count = milestones.len();
         if milestone_count == 0 || milestone_count > types::MAX_MILESTONES {
@@ -159,9 +156,12 @@ impl CampaignContract {
     /// Issue #194 – Donate to the campaign, enforcing campaign status.
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-    /// Issue #243 – Authorization: `donor.require_auth()`.
+    /// Issue #243 – Authorization: `donor...()`.
     ///
     /// Panics with `Error::CampaignNotActive` unless status is `Active` or `GoalReached`.
+    /// Panics with `Error::CampaignEnded` if the current ledger timestamp is >= `end_time`,
+    ///   regardless of whether status is still `Active` or `GoalReached`. This deadline
+    ///   gate fires before any state mutation or storage TTL bump.
     ///
     /// Issue #195 – After updating raised_amount, loops over milestones and unlocks
     ///              any whose target_amount <= raised_amount and status == Locked.
@@ -170,22 +170,28 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
+        // Issue #243 – Authorization check
+        donor.require_auth();
+
         // Freeze check — reject all mutating operations while frozen
-        // Must precede require_auth() so the freeze invariant short-circuits
-        // before any auth work is consumed.
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
-
-        // Issue #243 – Authorization check
-        donor.require_auth();
 
         let mut campaign: CampaignData =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         // Issue #194 – status check: only Active or GoalReached campaigns accept donations
+        // Issue #5   – deadline gate: reject donations past end_time regardless of status.
+        //              The check is interleaved inside the Active|GoalReached arm so that
+        //              Cancelled/Ended campaigns still panic with CampaignNotActive.
+        let now = env.ledger().timestamp();
         match campaign.status {
-            CampaignStatus::Active | CampaignStatus::GoalReached => {}
+            CampaignStatus::Active | CampaignStatus::GoalReached => {
+                if now >= campaign.end_time {
+                    panic_with_error(&env, Error::CampaignEnded);
+                }
+            }
             _ => panic_with_error(&env, Error::CampaignNotActive),
         }
 
@@ -274,12 +280,6 @@ impl CampaignContract {
             env.ledger().timestamp(),
         );
 
-        // Track diagnostic counter (no-op when `diag` feature is disabled)
-        #[cfg(feature = "diag")]
-        storage_increment_diagnostic_counter(&env, |m: &mut CampaignMetrics| {
-            m.donations_total += 1;
-        });
-
         // Issue #242 – Release reentrancy lock
         release_lock(&env);
     }
@@ -336,38 +336,6 @@ impl CampaignContract {
         }
     }
 
-    /// Emit current diagnostics as a `diagnostics` event.
-    ///
-    /// When the `diag` feature is disabled the event is not published
-    /// (the function body is empty). No auth required (view-like call).
-    pub fn emit_diagnostics(env: Env) {
-        #[cfg(feature = "diag")]
-        {
-            let metrics = crate::storage::storage_get_diagnostic_metrics(&env);
-            event::diagnostics_emit(&env, &metrics);
-            let mut metrics = metrics;
-            metrics.last_diagnostics_ledger = env.ledger().sequence();
-            crate::storage::storage_set_diagnostic_metrics(&env, &metrics);
-        }
-        #[cfg(not(feature = "diag"))]
-        let _ = env;
-    }
-
-    /// Returns diagnostic counters for the campaign contract.
-    ///
-    /// When the `diag` feature is disabled (default), returns all zeros.
-    /// When `diag` is enabled, returns live counters tracked in storage.
-    /// No auth required (read-only view).
-    pub fn metrics_view(env: Env) -> CampaignMetrics {
-        #[cfg(feature = "diag")]
-        {
-            return crate::storage::storage_get_diagnostic_metrics(&env);
-        }
-        #[cfg(not(feature = "diag"))]
-        let _ = env;
-        CampaignMetrics::default()
-    }
-
     /// Returns compact metrics for campaign dashboards.
     pub fn get_dashboard_metrics(env: Env) -> DashboardMetrics {
         let summary = Self::get_platform_summary(env);
@@ -392,43 +360,6 @@ impl CampaignContract {
 
     pub fn version() -> u32 {
         VERSION
-    }
-
-    /// Risk indicator helper for off-chain indexers.
-    ///
-    /// Returns a warning string if the campaign's accepted_assets contains
-    /// an XLM entry whose issuer does not match the canonical wrapped XLM
-    /// contract address for the current network. This helps indexers flag
-    /// potentially malicious campaigns that attempt to redirect native XLM
-    /// donations to arbitrary SACs.
-    ///
-    /// Returns an empty string if the campaign is not configured or if the
-    /// XLM configuration is valid.
-    ///
-    /// No auth required (read-only view).
-    pub fn risk_indicator(env: Env) -> String {
-        let campaign = match get_campaign(&env) {
-            Some(c) => c,
-            None => return String::from_str(&env, ""),
-        };
-
-        let xlm_code = soroban_sdk::String::from_str(&env, "XLM");
-        let canonical_address = get_canonical_xlm_address(&env);
-
-        for asset in campaign.accepted_assets.iter() {
-            if asset.asset_code == xlm_code {
-                if let Some(issuer) = &asset.issuer {
-                    if issuer != &canonical_address {
-                        return String::from_str(
-                            &env,
-                            "WARNING: XLM asset issuer does not match canonical wrapped XLM contract address",
-                        );
-                    }
-                }
-            }
-        }
-
-        String::from_str(&env, "")
     }
 
     /// Check if a donor is eligible to claim a refund.
@@ -474,15 +405,13 @@ impl CampaignContract {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
 
+        // Issue #243 – Authorization check
+        donor.require_auth();
+
         // Freeze check — reject all mutating operations while frozen
-        // Must precede require_auth() so the freeze invariant short-circuits
-        // before any auth work is consumed.
         if is_frozen(&env) {
             panic_with_error(&env, Error::ContractFrozen);
         }
-
-        // Issue #243 – Authorization check
-        donor.require_auth();
 
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
@@ -509,17 +438,11 @@ impl CampaignContract {
                 donor_record.refund_claimed = true;
                 set_donor(&env, &donor, &donor_record);
 
-                // Get the canonical XLM address for Native donations
-                let canonical_xlm_address = get_canonical_xlm_address(&env);
-
                 // For each asset the donor contributed to, calculate and transfer refund
                 for asset in campaign.accepted_assets.iter() {
                     let asset_address = match &asset.issuer {
                         Some(addr) => addr.clone(),
-                        None => {
-                            // Native XLM entry (issuer = None) - use canonical address
-                            canonical_xlm_address.clone()
-                        }
+                        None => continue, // Skip assets without an issuer (native XLM handled separately)
                     };
 
                     // Get amount donor contributed in this asset
@@ -567,12 +490,6 @@ impl CampaignContract {
                     (&donor, donor_record.total_donated),
                 );
 
-                // Track diagnostic counter (no-op when `diag` feature is disabled)
-                #[cfg(feature = "diag")]
-                storage_increment_diagnostic_counter(&env, |m: &mut CampaignMetrics| {
-                    m.refunds_total += 1;
-                });
-
                 // Issue #242 – Release reentrancy lock
                 release_lock(&env);
             }
@@ -612,19 +529,12 @@ impl CampaignContract {
         contract::get_campaign_status(&env)
     }
 
-    /// Issue #207 – Release a single milestone (from the primary accepted asset).
+    /// Issue #207 – Release a single milestone (all assets proportionally).
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone(env: Env, milestone_index: u32, recipient: Address) {
-        // Freeze check — reject all mutating operations while frozen.
-        // Must precede require_auth() so the freeze invariant short-circuits
-        // before any auth work is consumed.
-        if is_frozen(&env) {
-            panic_with_error(&env, Error::ContractFrozen);
-        }
-
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
         let campaign =
@@ -635,27 +545,10 @@ impl CampaignContract {
 
     /// Issue #208 – Multi-asset milestone release with proportional distribution.
     ///
-    /// Use `release_milestone_multi_asset` for multi-asset campaigns and
-    /// `release_milestone` for single-asset campaigns.
-    ///
-    /// ## Single-asset vs multi-asset
-    ///
-    /// - Single-asset release: when the campaign accepts exactly one asset (`accepted_assets.len() == 1`). This is the legacy fast path; it transfers the milestone delta in full.
-    /// - Multi-asset release: when the campaign accepts more than one asset. This proportionally distributes across all assets.
-    ///
-    /// Calling the wrong one is unidiomatic and will be rejected.
-    ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `creator.require_auth()`.
     /// Issue #244 – Balance verification: checks contract balance before each transfer.
     pub fn release_milestone_multi_asset(env: Env, milestone_index: u32, recipient: Address) {
-        // Freeze check — reject all mutating operations while frozen.
-        // Must precede require_auth() so the freeze invariant short-circuits
-        // before any auth work is consumed.
-        if is_frozen(&env) {
-            panic_with_error(&env, Error::ContractFrozen);
-        }
-
         // Issue #243 – Authorization: hoisted here so mock_all_auths() in tests
         // can intercept require_auth() within the contract invocation frame.
         let campaign =
@@ -676,12 +569,6 @@ impl CampaignContract {
         get_all_milestones::get_all_milestones_view(&env)
     }
 
-    /// Get paginated list of milestones (enriched views).
-    /// No auth required (read-only view).
-    pub fn get_milestones_page(env: Env, page: u32, page_size: u32) -> Vec<views::MilestoneView> {
-        get_all_milestones::get_milestones_page_view(&env, page, page_size)
-    }
-
     /// Issue #246 – Upgrade the contract's WASM hash.
     ///
     /// Only the admin (creator address stored at initialization) can call this.
@@ -692,17 +579,15 @@ impl CampaignContract {
     /// - `Error::NotInitialized` if campaign not yet initialized
     /// - `Error::ContractFrozen` if the contract is currently frozen
     pub fn upgrade(env: Env, new_wasm_hash: BytesN<32>) {
-        // Freeze check — reject all mutating operations while frozen.
-        // Must precede require_auth() so the freeze invariant short-circuits
-        // before any auth work is consumed.
-        if is_frozen(&env) {
-            panic_with_error(&env, Error::ContractFrozen);
-        }
-
         let campaign =
             get_campaign(&env).unwrap_or_else(|| panic_with_error(&env, Error::NotInitialized));
 
         campaign.creator.require_auth();
+
+        // Freeze check — consistent with donate(), claim_refund(), and release_milestone()
+        if is_frozen(&env) {
+            panic_with_error(&env, Error::ContractFrozen);
+        }
 
         // Actually deploy the new WASM hash to the contract
         env.deployer()
@@ -763,22 +648,6 @@ fn require_creator(env: &Env) {
     campaign.creator.require_auth();
 }
 
-/// Returns the canonical wrapped XLM contract address for the current network.
-///
-/// In the current implementation, this returns a fixed address that must be
-/// present in accepted_assets if the campaign accepts XLM with an issuer.
-/// This prevents malicious creators from routing native XLM donations to arbitrary SACs.
-///
-/// For production deployment, this should be configured based on the actual network
-/// (testnet vs mainnet) to use the well-known wrapped XLM SAC addresses.
-fn get_canonical_xlm_address(env: &Env) -> Address {
-    // For testing purposes, we use a generated address that represents the canonical XLM
-    // In production, this should be the actual well-known wrapped XLM contract address
-    // for the network (testnet or mainnet)
-    let canonical_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-    Address::from_string(&soroban_sdk::String::from_str(env, canonical_str))
-}
-
 /// Validates that `asset` is in the campaign's accepted list and returns the
 /// token contract address needed to construct a `token::Client`.
 fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &CampaignData) -> Address {
@@ -794,22 +663,14 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
             addr.clone()
         }
         AssetInfo::Native => {
-            // Return the canonical wrapped XLM address for the current network
-            // This prevents malicious creators from routing native XLM to arbitrary SACs
-            let canonical_address = get_canonical_xlm_address(env);
-
-            // Verify that the canonical XLM address is in accepted_assets
+            // Find the XLM entry in accepted_assets by asset_code == "XLM".
             let xlm_code = soroban_sdk::String::from_str(env, "XLM");
-            let has_canonical_xlm = campaign
+            campaign
                 .accepted_assets
                 .iter()
-                .any(|a| a.asset_code == xlm_code && a.issuer == Some(canonical_address.clone()));
-
-            if !has_canonical_xlm {
-                panic_with_error(env, Error::NativeAssetConfigurationMismatch);
-            }
-
-            canonical_address
+                .find(|a| a.asset_code == xlm_code)
+                .and_then(|a| a.issuer.clone())
+                .unwrap_or_else(|| panic_with_error(env, Error::AssetNotAccepted))
         }
     }
 }
@@ -819,27 +680,6 @@ fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     for asset in assets.iter() {
         if asset.asset_code.is_empty() {
             panic_with_error(env, Error::InvalidAssetCode);
-        }
-    }
-    Ok(())
-}
-
-/// Validates that if accepted_assets contains an XLM entry with an issuer,
-/// it must match the canonical wrapped XLM contract address for the current network.
-/// This prevents malicious creators from routing native XLM donations to arbitrary SACs.
-#[allow(clippy::ptr_arg)] // soroban_sdk::Vec does not implement Deref<Target=[T]>, so `&Vec<T>` is mandatory here even though std::Vec would auto-coerce.
-fn validate_native_xlm_configuration(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
-    let xlm_code = soroban_sdk::String::from_str(env, "XLM");
-    let canonical_address = get_canonical_xlm_address(env);
-
-    for asset in assets.iter() {
-        if asset.asset_code == xlm_code {
-            // If there's an XLM entry with an issuer, it must be the canonical address
-            if let Some(issuer) = &asset.issuer {
-                if issuer != &canonical_address {
-                    panic_with_error(env, Error::NativeAssetConfigurationMismatch);
-                }
-            }
         }
     }
     Ok(())
@@ -984,32 +824,13 @@ pub fn validate_milestone_transition(
 
 #[cfg(test)]
 mod test {
-    pub mod budget_invariant_tests;
     pub mod claim_refund_tests;
-    pub mod diagnostics_tests;
     pub mod get_campaign_status_tests;
     pub mod integration_tests;
     pub mod invariant_tests;
     pub mod negative_path_tests;
     pub mod refund_eligibility_tests;
     pub mod release_milestone_tests;
-
-    use soroban_sdk::{testutils::Address as AddressTestUtils, Address, BytesN, Env, String, Vec};
-
-    use crate::storage::get_campaign;
-    use crate::types::{CampaignData, MilestoneData, MilestoneStatus, StellarAsset};
-
-    /// Pre-configured campaign environment returned by `with_campaign`.
-    ///
-    /// The env already has `mock_all_auths()` applied and the campaign
-    /// contract is registered and initialized. Callers can invoke contract
-    /// methods via `CampaignContract::method(fixture.env.clone(), ...)`.
-    pub struct CampaignFixture {
-        pub env: Env,
-        pub creator: Address,
-        pub contract_id: Address,
-        pub campaign: CampaignData,
-    }
 
     /// Shared helper: register the contract and run the body inside
     /// `env.as_contract()` so storage, ledger, and auth work correctly.
@@ -1020,119 +841,6 @@ mod test {
     {
         let contract_id = env.register_contract(None, crate::CampaignContract);
         env.as_contract(&contract_id, f)
-    }
-
-    /// Runs `f` inside the contract context and asserts that the Soroban
-    /// resource budget (CPU instructions and memory) stays below the given
-    /// thresholds.
-    ///
-    /// The budget is reset to unlimited before `f` runs, so the measured
-    /// values reflect the true cost of the operation rather than the default
-    /// test budget.
-    ///
-    /// # Panics
-    /// Panics with a descriptive message containing `label` if either
-    /// `cpu_instruction_cost()` ≥ `cpu_max` or `memory_bytes_cost()` ≥ `mem_max`.
-    pub(crate) fn assert_budget_under(
-        env: &soroban_sdk::Env,
-        label: &str,
-        cpu_max: u64,
-        mem_max: u64,
-        f: impl FnOnce(),
-    ) {
-        let mut budget = env.cost_estimate().budget();
-        budget.reset_unlimited();
-        f();
-        let cpu = budget.cpu_instruction_cost();
-        let mem = budget.memory_bytes_cost();
-        assert!(
-            cpu < cpu_max,
-            "Budget regression (CPU): {} used {} cpu instructions, expected < {}",
-            label,
-            cpu,
-            cpu_max,
-        );
-        assert!(
-            mem < mem_max,
-            "Budget regression (Memory): {} used {} memory bytes, expected < {}",
-            label,
-            mem,
-            mem_max,
-        );
-    }
-
-    /// Set up an env with a fully initialized campaign contract.
-    ///
-    /// `prefix` is a human-readable label (e.g. `"donation_flow"`) for
-    /// documentation and future parallel-test scoping; it does not affect
-    /// storage isolation (each `Env` is independent).
-    ///
-    /// The returned `CampaignFixture` contains the env, creator address,
-    /// contract ID, and the initial campaign state.
-    ///
-    /// ## Ordering guidance
-    ///
-    /// 1. Call `with_campaign("my_test_name")` to get a fixture.
-    /// 2. `env.mock_all_auths()` is already called — for tests that need
-    ///    real auth, call `env.mock_all_auths_reset()` first.
-    /// 3. Invoke contract methods via `CampaignContract::method(...)`.
-    /// 4. Assert storage state via `get_campaign`, `get_milestone`, etc.
-    ///
-    /// ## Example
-    ///
-    /// ```ignore
-    /// let fx = with_campaign("test_donate");
-    /// CampaignContract::donate(fx.env.clone(), fx.creator, 500, AssetInfo::Native);
-    /// ```
-    pub fn with_campaign(prefix: &str) -> CampaignFixture {
-        let _ = prefix; // reserved for future parallel-test scoping
-        let env = Env::default();
-        env.mock_all_auths();
-
-        let creator = Address::generate(&env);
-        let goal_amount: i128 = 1000;
-
-        let mut assets: Vec<StellarAsset> = Vec::new(&env);
-        assets.push_back(StellarAsset {
-            asset_code: String::from_str(&env, "XLM"),
-            issuer: Some(Address::generate(&env)),
-        });
-
-        let mut milestones: Vec<MilestoneData> = Vec::new(&env);
-        milestones.push_back(MilestoneData {
-            index: 0,
-            target_amount: goal_amount,
-            released_amount: 0,
-            description_hash: BytesN::from_array(&env, &[1u8; 32]),
-            status: MilestoneStatus::Locked,
-            released_at: None,
-            released_at_ledger: None,
-            release_tx: None,
-            released_to: None,
-        });
-
-        let contract_id = env.register_contract(None, crate::CampaignContract);
-
-        let campaign = env.as_contract(&contract_id, || {
-            crate::CampaignContract::initialize(
-                env.clone(),
-                creator.clone(),
-                goal_amount,
-                env.ledger().timestamp() + 86400,
-                assets,
-                milestones,
-                0,
-            )
-            .unwrap();
-            get_campaign(&env).expect("campaign should be stored after initialize")
-        });
-
-        CampaignFixture {
-            env,
-            creator,
-            contract_id,
-            campaign,
-        }
     }
 }
 

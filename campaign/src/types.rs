@@ -112,200 +112,13 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen = 80,
-    /// Native XLM configuration does not match the canonical wrapped XLM contract address.
-    NativeAssetConfigurationMismatch = 81,
-
-    /// Campaign accepts multiple assets; use `release_milestone_multi_asset` instead.
-    UseMultiAssetRelease = 82,
-    /// Invalid page or page size for paginated milestone retrieval.
-    InvalidPage = 84,
 }
 
-/// Maximum number of milestones returned per page for `get_milestones_page`.
-pub const MAX_PAGE_SIZE: u32 = 10;
-
-// ─── Wire-format helpers ──────────────────────────────────────────────────────
-
-impl Error {
-    /// Returns the stable on-chain wire code for this error variant.
-    ///
-    /// The returned `u32` is the same discriminant that `#[contracterror]` maps
-    /// to `Error(Contract, #N)` in the transaction result.  Off-chain indexers
-    /// and SDK consumers should prefer this method over raw `as u32` casts,
-    /// which are technically valid but harder to audit across dependency bumps.
-    pub fn as_wire_code(self) -> u32 {
-        self as u32
-    }
-}
-
-/// Canonical wire-code table for every variant of `Error`.
-///
-/// Each entry maps a typed error variant to its stable on-chain wire code.
-/// Indexers can regenerate lookup tables deterministically from this const.
-/// Entries are sorted by wire code to enable binary search and diff-friendly
-/// review.
-pub const WIRE_CODE_TABLE: &[(Error, u32)] = &[
-    (Error::AlreadyInitialized, 1),
-    (Error::NotInitialized, 2),
-    (Error::Unauthorized, 3),
-    (Error::CampaignEnded, 4),
-    (Error::CampaignNotActive, 5),
-    (Error::AssetNotAccepted, 6),
-    (Error::DonationTooSmall, 7),
-    (Error::MilestoneNotFound, 8),
-    (Error::MilestoneNotUnlocked, 9),
-    (Error::PreviousMilestoneNotReleased, 10),
-    (Error::CannotCancelWithFunds, 11),
-    (Error::RefundWindowClosed, 12),
-    (Error::InvalidGoalAmount, 13),
-    (Error::InvalidEndTime, 14),
-    (Error::InvalidMilestones, 15),
-    (Error::InsufficientContractBalance, 16),
-    (Error::Overflow, 17),
-    (Error::InvalidAssets, 18),
-    (Error::InvalidAssetCode, 19),
-    (Error::MilestoneMismatch, 20),
-    (Error::InvalidMilestoneCount, 21),
-    (Error::InvalidCampaignTransition, 22),
-    (Error::InvalidMilestoneTransition, 23),
-    (Error::GoalNotReached, 24),
-    (Error::InvalidStorageValue, 25),
-    (Error::StorageWriteError, 26),
-    (Error::InvalidRecipient, 30),
-    (Error::MissingIssuerAddress, 31),
-    (Error::ZeroReleaseAmount, 32),
-    (Error::NothingToRelease, 33),
-    (Error::MilestoneReleasedExceedsTarget, 34),
-    (Error::MilestoneAlreadyReleased, 40),
-    (Error::UnreleasedMilestonesExist, 41),
-    (Error::RefundNotPermitted, 50),
-    (Error::NoDonorRecord, 51),
-    (Error::RefundAlreadyClaimed, 52),
-    (Error::ReentrantCall, 60),
-    (Error::InvalidAmount, 70),
-    (Error::ContractFrozen, 80),
-    (Error::NativeAssetConfigurationMismatch, 81),
-    (Error::InvalidPage, 84),
-];
-
-/// Diagnostic counters for the campaign contract.
-///
-/// Only populated when the `diag` feature is enabled. The `metrics_view`
-/// entrypoint always exists but returns all zeros when the feature is off.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct CampaignMetrics {
-    /// Total number of successful donation calls.
-    pub donations_total: u64,
-    /// Total number of completed milestone releases.
-    pub milestones_released_total: u64,
-    /// Total number of successfully processed refunds.
-    pub refunds_total: u64,
-    /// Ledger sequence when diagnostics were last emitted.
-    pub last_diagnostics_ledger: u32,
-}
 #[cfg(test)]
 mod error_code_tests {
-    #[test]
-    fn campaign_error_discriminants_are_unique() {
-        let codes = super::WIRE_CODE_TABLE;
-        for (index, (_, code)) in codes.iter().enumerate() {
-            assert!(
-                !codes[index + 1..].iter().any(|(_, c)| c == code),
-                "Duplicate wire code {} at index {}",
-                code,
-                index,
-            );
-        }
-    }
-
-    #[test]
-    fn as_wire_code_matches_table() {
-        for (variant, expected_code) in super::WIRE_CODE_TABLE {
-            let actual = variant.as_wire_code();
-            assert_eq!(
-                actual, *expected_code,
-                "as_wire_code() mismatch for {:?}: expected {}, got {}",
-                variant, expected_code, actual,
-            );
-        }
-    }
-
-    #[test]
-    fn wire_code_table_is_sorted() {
-        let codes = super::WIRE_CODE_TABLE;
-        for i in 1..codes.len() {
-            assert!(
-                codes[i - 1].1 <= codes[i].1,
-                "WIRE_CODE_TABLE not sorted at index {}: {} > {}",
-                i,
-                codes[i - 1].1,
-                codes[i].1,
-            );
-        }
-    }
-
-    #[test]
-    fn wire_code_table_matches_fixture() {
-        extern crate alloc;
-        let actual = super::WIRE_CODE_TABLE
-            .iter()
-            .map(|(variant, code)| alloc::format!("{:?} -> {}", variant, code))
-            .collect::<alloc::vec::Vec<_>>()
-            .join("\n");
-        const EXPECTED: &str = "AlreadyInitialized -> 1
-NotInitialized -> 2
-Unauthorized -> 3
-CampaignEnded -> 4
-CampaignNotActive -> 5
-AssetNotAccepted -> 6
-DonationTooSmall -> 7
-MilestoneNotFound -> 8
-MilestoneNotUnlocked -> 9
-PreviousMilestoneNotReleased -> 10
-CannotCancelWithFunds -> 11
-RefundWindowClosed -> 12
-InvalidGoalAmount -> 13
-InvalidEndTime -> 14
-InvalidMilestones -> 15
-InsufficientContractBalance -> 16
-Overflow -> 17
-InvalidAssets -> 18
-InvalidAssetCode -> 19
-MilestoneMismatch -> 20
-InvalidMilestoneCount -> 21
-InvalidCampaignTransition -> 22
-InvalidMilestoneTransition -> 23
-GoalNotReached -> 24
-InvalidStorageValue -> 25
-StorageWriteError -> 26
-InvalidRecipient -> 30
-MissingIssuerAddress -> 31
-ZeroReleaseAmount -> 32
-NothingToRelease -> 33
-MilestoneReleasedExceedsTarget -> 34
-MilestoneAlreadyReleased -> 40
-UnreleasedMilestonesExist -> 41
-RefundNotPermitted -> 50
-NoDonorRecord -> 51
-RefundAlreadyClaimed -> 52
-ReentrantCall -> 60
-InvalidAmount -> 70
-ContractFrozen -> 80
-NativeAssetConfigurationMismatch -> 81
-InvalidPage -> 84";
-        assert_eq!(
-            actual.trim(),
-            EXPECTED.trim(),
-            "WIRE_CODE_TABLE snapshot mismatch — regenerate with: \
-             cargo test -p milestonex-campaign update_wire_fixture 2>/dev/null || true; \
-             cp campaign/src/test/wire_format_actual.txt campaign/test_snapshots/wire_code_fixture.txt",
-        );
-    }
-
+    use super::Error;
     #[test]
     fn campaign_error_discriminants_are_unique_without_common_error_space() {
-        use super::Error;
         // `milestonex-common` intentionally exposes no `#[contracterror]` enum;
         // this guards the remaining campaign-local error space against internal
         // duplicate discriminants while preserving the stable on-chain codes.
@@ -349,8 +162,6 @@ InvalidPage -> 84";
             Error::ReentrantCall as u32,
             Error::InvalidAmount as u32,
             Error::ContractFrozen as u32,
-            Error::UseMultiAssetRelease as u32,
-            Error::InvalidPage as u32,
         ];
         for (index, code) in campaign_codes.iter().enumerate() {
             assert!(!campaign_codes[index + 1..].contains(code));
@@ -491,8 +302,6 @@ pub enum DataKey {
     ReentrancyLock,
     /// Freeze flag; present and true = contract is frozen, mutating ops blocked.
     Frozen,
-    /// Diagnostic counters (only written when feature `diag` is enabled).
-    DiagnosticMetrics,
 }
 
 // ─── Asset types ──────────────────────────────────────────────────────────────
