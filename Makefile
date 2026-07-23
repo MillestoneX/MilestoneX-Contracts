@@ -12,7 +12,7 @@
 
 .PHONY: build build-wasm build-tools test fmt fmt-tools lint lint-tools lint-schema all-lint \
         clean optimize help setup deploy-testnet deploy-sandbox sandbox-start \
-        audit deny wire-test
+        audit deny wire-test check-wasm-size
 
 # Default target
 build: build-wasm build-tools
@@ -22,6 +22,12 @@ build: build-wasm build-tools
 build-wasm:
 	@echo "🔨 Building Soroban contract..."
 	cargo build -p milestonex-core -p milestonex-campaign -p milestonex-token-bridge -p milestonex-common --target wasm32v1-none --release
+	@test -f target/wasm32v1-none/release/milestonex_campaign.wasm || { \
+		echo "❌ milestonex_campaign.wasm was not produced by the build above."; \
+		echo "   Check that milestonex-campaign is still listed on the cargo build line"; \
+		echo "   and that its [lib] crate-type still includes \"cdylib\" (see issue #43)."; \
+		exit 1; \
+	}
 	@echo "✅ WASM contracts built successfully"
 
 # Build CLI tools
@@ -164,7 +170,14 @@ optimize: build
 		after=$$(wc -c < "$$wasm"); \
 		echo "  $$(basename $$wasm): $${before}B -> $${after}B"; \
 	done
+	@$(MAKE) check-wasm-size
 	@echo "✅ Optimization complete"
+
+# Regression check (issue #43): verify milestonex_campaign.wasm — the binary
+# deploy tooling ships — exists and is under the Soroban 64 KiB hosted-contract
+# ceiling.
+check-wasm-size:
+	@bash scripts/check-wasm-artifact.sh
 
 # Show help
 help:
@@ -185,6 +198,7 @@ help:
 	@echo "  make deploy-sandbox - Deploy contract to local sandbox"
 	@echo "  make deploy-testnet - Deploy contract to Stellar testnet"
 	@echo "  make optimize       - Optimize WASM with wasm-opt -Oz"
+	@echo "  make check-wasm-size - Verify milestonex_campaign.wasm exists and is < 64 KiB (issue #43)"
 	@echo "  make audit          - Run cargo-audit for vulnerability scanning"
 	@echo "  make deny           - Check license compliance with cargo-deny"
 	@echo "  make help           - Show this help message"
