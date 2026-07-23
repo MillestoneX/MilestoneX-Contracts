@@ -47,3 +47,6 @@ deployments/*.json
 tarpaulin-report.html
 cobertura.xml
 tarpaulin-ci/
+
+# Test snapshots (generated locally, not committed)
+/campaign/test_snapshots/

@@ -24,7 +24,9 @@ use soroban_sdk::token::StellarAssetClient;
 use soroban_sdk::{Address, BytesN, Env, String, Vec};
 
 use super::with_contract;
-use crate::storage::{get_milestone, set_campaign, set_milestone};
+use crate::storage::{
+    get_milestone, set_campaign, set_milestone, storage_set_asset_raised, storage_set_total_raised,
+};
 use crate::types::{CampaignData, CampaignStatus, MilestoneData, MilestoneStatus, StellarAsset};
 use crate::CampaignContractClient;
 
@@ -399,13 +401,33 @@ fn test_release_with_single_asset_transfers_correct_amount() {
     });
 }
 
-/// Test: with three accepted assets, only the first (primary) asset is
-/// debited. The other two assets' balances must remain untouched — this is
-/// the regression test for the fund-draining vulnerability where
-/// `release_milestone` transferred the full release amount from every
-/// accepted asset instead of just one.
+/// Test: with three accepted assets, calling the single-asset release path
+/// panics with `UseMultiAssetRelease`. The creator must use
+/// `release_milestone_multi_asset` instead.
 #[test]
-fn test_release_with_multiple_assets_only_debits_first_asset() {
+#[should_panic(expected = "HostError")]
+fn test_release_with_multiple_assets_panics_with_use_multi_asset() {
+    let env = Env::default();
+    env.ledger().set_timestamp(BASE);
+    env.mock_all_auths();
+    with_contract(&env, || {
+        let creator = Address::generate(&env);
+        let funding_per_asset = 10_000_000i128;
+        let _issuers =
+            create_multi_asset_campaign_with_funding(&env, &creator, 1, 3, funding_per_asset);
+        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        let recipient = Address::generate(&env);
+
+        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+    });
+}
+
+// ─── Multi-asset release: proportional distribution ───────────────────────────
+
+/// Test: with three accepted assets, the multi-asset release path distributes
+/// proportionally across all assets based on per-asset raised amounts.
+#[test]
+fn test_multi_asset_release_distributes_proportionally() {
     let env = Env::default();
     env.ledger().set_timestamp(BASE);
     env.mock_all_auths();
@@ -414,37 +436,29 @@ fn test_release_with_multiple_assets_only_debits_first_asset() {
         let funding_per_asset = 10_000_000i128;
         let issuers =
             create_multi_asset_campaign_with_funding(&env, &creator, 1, 3, funding_per_asset);
-        create_test_milestone(&env, 0, 3000, MilestoneStatus::Unlocked);
+        create_test_milestone(&env, 0, 300, MilestoneStatus::Unlocked);
         let recipient = Address::generate(&env);
 
-        crate::release_milestone::release_milestone(&env, 0, recipient.clone());
+        for i in 0..3 {
+            let issuer = issuers.get(i).unwrap();
+            storage_set_asset_raised(&env, &issuer, 100);
+        }
+        storage_set_total_raised(&env, 300);
+
+        crate::multi_asset_release::release_milestone_multi_asset(&env, 0, recipient.clone());
+
+        for i in 0..3 {
+            let client = soroban_sdk::token::Client::new(&env, &issuers.get(i).unwrap());
+            assert_eq!(client.balance(&recipient), 100);
+            assert_eq!(
+                client.balance(&env.current_contract_address()),
+                funding_per_asset - 100
+            );
+        }
 
         let milestone = get_milestone(&env, 0).expect("Milestone should exist");
         assert_eq!(milestone.status, MilestoneStatus::Released);
-        assert_eq!(milestone.released_amount, milestone.target_amount);
-
-        // Primary asset (first accepted asset) was debited by the release amount.
-        let primary_client = soroban_sdk::token::Client::new(&env, &issuers.get(0).unwrap());
-        assert_eq!(primary_client.balance(&recipient), 3000);
-        assert_eq!(
-            primary_client.balance(&env.current_contract_address()),
-            funding_per_asset - 3000
-        );
-
-        // Secondary assets must remain completely untouched.
-        let second_client = soroban_sdk::token::Client::new(&env, &issuers.get(1).unwrap());
-        assert_eq!(
-            second_client.balance(&env.current_contract_address()),
-            funding_per_asset
-        );
-        assert_eq!(second_client.balance(&recipient), 0);
-
-        let third_client = soroban_sdk::token::Client::new(&env, &issuers.get(2).unwrap());
-        assert_eq!(
-            third_client.balance(&env.current_contract_address()),
-            funding_per_asset
-        );
-        assert_eq!(third_client.balance(&recipient), 0);
+        assert_eq!(milestone.released_amount, 300);
     });
 }
 

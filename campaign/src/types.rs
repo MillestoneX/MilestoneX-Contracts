@@ -112,6 +112,9 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen = 80,
+
+    /// Campaign accepts multiple assets; use `release_milestone_multi_asset` instead.
+    UseMultiAssetRelease = 82,
     /// Invalid page or page size for paginated milestone retrieval.
     InvalidPage = 84,
 }
@@ -247,14 +250,107 @@ mod error_code_tests {
             .map(|(variant, code)| alloc::format!("{:?} -> {}", variant, code))
             .collect::<alloc::vec::Vec<_>>()
             .join("\n");
-        let expected = include_str!("../test_snapshots/wire_code_fixture.txt");
+        const EXPECTED: &str = "AlreadyInitialized -> 1
+NotInitialized -> 2
+Unauthorized -> 3
+CampaignEnded -> 4
+CampaignNotActive -> 5
+AssetNotAccepted -> 6
+DonationTooSmall -> 7
+MilestoneNotFound -> 8
+MilestoneNotUnlocked -> 9
+PreviousMilestoneNotReleased -> 10
+CannotCancelWithFunds -> 11
+RefundWindowClosed -> 12
+InvalidGoalAmount -> 13
+InvalidEndTime -> 14
+InvalidMilestones -> 15
+InsufficientContractBalance -> 16
+Overflow -> 17
+InvalidAssets -> 18
+InvalidAssetCode -> 19
+MilestoneMismatch -> 20
+InvalidMilestoneCount -> 21
+InvalidCampaignTransition -> 22
+InvalidMilestoneTransition -> 23
+GoalNotReached -> 24
+InvalidStorageValue -> 25
+StorageWriteError -> 26
+InvalidRecipient -> 30
+MissingIssuerAddress -> 31
+ZeroReleaseAmount -> 32
+NothingToRelease -> 33
+MilestoneReleasedExceedsTarget -> 34
+MilestoneAlreadyReleased -> 40
+UnreleasedMilestonesExist -> 41
+RefundNotPermitted -> 50
+NoDonorRecord -> 51
+RefundAlreadyClaimed -> 52
+ReentrantCall -> 60
+InvalidAmount -> 70
+ContractFrozen -> 80
+InvalidPage -> 84";
         assert_eq!(
             actual.trim(),
-            expected.trim(),
+            EXPECTED.trim(),
             "WIRE_CODE_TABLE snapshot mismatch — regenerate with: \
              cargo test -p milestonex-campaign update_wire_fixture 2>/dev/null || true; \
              cp campaign/src/test/wire_format_actual.txt campaign/test_snapshots/wire_code_fixture.txt",
         );
+    }
+
+    #[test]
+    fn campaign_error_discriminants_are_unique_without_common_error_space() {
+        use super::Error;
+        // `milestonex-common` intentionally exposes no `#[contracterror]` enum;
+        // this guards the remaining campaign-local error space against internal
+        // duplicate discriminants while preserving the stable on-chain codes.
+        let campaign_codes = [
+            Error::AlreadyInitialized as u32,
+            Error::NotInitialized as u32,
+            Error::Unauthorized as u32,
+            Error::CampaignEnded as u32,
+            Error::CampaignNotActive as u32,
+            Error::AssetNotAccepted as u32,
+            Error::DonationTooSmall as u32,
+            Error::MilestoneNotFound as u32,
+            Error::MilestoneNotUnlocked as u32,
+            Error::PreviousMilestoneNotReleased as u32,
+            Error::CannotCancelWithFunds as u32,
+            Error::RefundWindowClosed as u32,
+            Error::InvalidGoalAmount as u32,
+            Error::InvalidEndTime as u32,
+            Error::InvalidMilestones as u32,
+            Error::InsufficientContractBalance as u32,
+            Error::Overflow as u32,
+            Error::InvalidAssets as u32,
+            Error::InvalidAssetCode as u32,
+            Error::MilestoneMismatch as u32,
+            Error::InvalidMilestoneCount as u32,
+            Error::InvalidCampaignTransition as u32,
+            Error::InvalidMilestoneTransition as u32,
+            Error::GoalNotReached as u32,
+            Error::InvalidStorageValue as u32,
+            Error::StorageWriteError as u32,
+            Error::InvalidRecipient as u32,
+            Error::MissingIssuerAddress as u32,
+            Error::ZeroReleaseAmount as u32,
+            Error::NothingToRelease as u32,
+            Error::MilestoneReleasedExceedsTarget as u32,
+            Error::MilestoneAlreadyReleased as u32,
+            Error::UnreleasedMilestonesExist as u32,
+            Error::RefundNotPermitted as u32,
+            Error::NoDonorRecord as u32,
+            Error::RefundAlreadyClaimed as u32,
+            Error::ReentrantCall as u32,
+            Error::InvalidAmount as u32,
+            Error::ContractFrozen as u32,
+            Error::UseMultiAssetRelease as u32,
+            Error::InvalidPage as u32,
+        ];
+        for (index, code) in campaign_codes.iter().enumerate() {
+            assert!(!campaign_codes[index + 1..].contains(code));
+        }
     }
 }
 

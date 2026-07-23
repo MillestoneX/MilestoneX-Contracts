@@ -57,6 +57,16 @@ fn compute_asset_release(
 /// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
 /// verified `creator.require_auth()` before calling this function.
 ///
+/// Use `release_milestone_multi_asset` for multi-asset campaigns and
+/// `release_milestone` for single-asset campaigns.
+///
+/// ## Single-asset vs multi-asset
+///
+/// - Single-asset release: when the campaign accepts exactly one asset (`accepted_assets.len() == 1`). This is the legacy fast path; it transfers the milestone delta in full.
+/// - Multi-asset release: when the campaign accepts more than one asset. This proportionally distributes across all assets.
+///
+/// Calling the wrong one is unidiomatic and will be rejected.
+///
 /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
 /// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///

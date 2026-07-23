@@ -59,8 +59,10 @@ Emitted once per milestone when its target is first reached. Not re-emitted if t
 ## `milestone_released`
 
 Emitted after each successful token transfer during milestone release.
-When a multi-asset release transfers tokens from multiple assets, a separate event
-is emitted per asset.
+The same `milestone_released` event is emitted regardless of whether the
+release used the single-asset path (`release_milestone`) or the multi-asset
+path (`release_milestone_multi_asset`). When a multi-asset release transfers
+tokens from multiple assets, a separate event is emitted per asset.
 
 **Topics:** `["milestone_released", contract_address]`
 
