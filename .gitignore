@@ -1,11 +1,6 @@
 # Dependencies
 /target
 /Cargo.lock
-node_modules/
-wallet-client/node_modules/
-
-# JS build intermediates
-wallet_connect.bundle.js
 
 # Environment
 .env
@@ -48,5 +43,5 @@ tarpaulin-report.html
 cobertura.xml
 tarpaulin-ci/
 
-# Test snapshots (generated locally, not committed)
-/campaign/test_snapshots/
+# Soroban test snapshots (build artifacts)
+**/test_snapshots/

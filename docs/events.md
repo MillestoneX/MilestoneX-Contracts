@@ -25,6 +25,9 @@ Emitted once when the campaign contract is successfully initialized.
 ## `donation_received`
 
 Emitted after every successful donation, once storage has been updated.
+Donations are rejected if the current ledger timestamp is >= the campaign's
+`end_time`, regardless of whether the campaign status is still `Active` or
+`GoalReached`. This deadline gate fires before any state mutation.
 
 **Topics:** `["donation_received", contract_address]`
 
@@ -59,10 +62,8 @@ Emitted once per milestone when its target is first reached. Not re-emitted if t
 ## `milestone_released`
 
 Emitted after each successful token transfer during milestone release.
-The same `milestone_released` event is emitted regardless of whether the
-release used the single-asset path (`release_milestone`) or the multi-asset
-path (`release_milestone_multi_asset`). When a multi-asset release transfers
-tokens from multiple assets, a separate event is emitted per asset.
+When a multi-asset release transfers tokens from multiple assets, a separate event
+is emitted per asset.
 
 **Topics:** `["milestone_released", contract_address]`
 
