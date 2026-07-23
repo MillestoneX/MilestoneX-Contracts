@@ -72,6 +72,12 @@ impl CampaignContract {
     /// - `Error::InvalidMilestoneCount` if milestone count is not 1-5
     /// - `Error::InvalidMilestones`     if milestones are not sorted ascending
     /// - `Error::MilestoneMismatch`     if last milestone.target_amount != goal_amount
+    /// Issue #175, #194 – Initialize the campaign contract.
+    ///
+    /// **Authorization:** Creator must call `require_auth()`.
+    ///
+    /// **See also:** `docs/state-machine.md` for full authorization matrix, freeze/reentrancy gates,
+    /// and state transition rules for all entrypoints.
     pub fn initialize(
         env: Env,
         creator: soroban_sdk::Address,
@@ -153,19 +159,18 @@ impl CampaignContract {
         Ok(())
     }
 
-    /// Issue #194 – Donate to the campaign, enforcing campaign status.
+    /// Issue #194, #242, #243 – Donate to the campaign, enforcing campaign status.
     ///
-    /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-    /// Issue #243 – Authorization: `donor...()`.
+    /// **Authorization:** Donor must call `require_auth()`.
+    /// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
+    /// **Reentrancy:** Acquires lock at entry, releases at exit. See `docs/state-machine.md`.
     ///
     /// Panics with `Error::CampaignNotActive` unless status is `Active` or `GoalReached`.
     /// Panics with `Error::CampaignEnded` if the current ledger timestamp is >= `end_time`,
-    ///   regardless of whether status is still `Active` or `GoalReached`. This deadline
-    ///   gate fires before any state mutation or storage TTL bump.
+    ///   regardless of whether status is still `Active` or `GoalReached`.
     ///
-    /// Issue #195 – After updating raised_amount, loops over milestones and unlocks
-    ///              any whose target_amount <= raised_amount and status == Locked.
-    /// Issue #198 – After donation, transitions to GoalReached if raised_amount >= goal_amount.
+    /// **See also:** `docs/state-machine.md` for full entrypoint authorization matrix,
+    /// freeze/reentrancy gates, and state transition diagrams.
     pub fn donate(env: Env, donor: Address, amount: i128, asset: AssetInfo) {
         // Issue #242 – Reentrancy protection: acquire lock
         acquire_lock(&env);
@@ -392,7 +397,14 @@ impl CampaignContract {
     ///
     /// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
     /// Issue #243 – Authorization: `donor.require_auth()`.
-    /// Issue #244 – Balance verification: checks contract balance before each transfer.
+    /// Issue #211, #242, #243 – Claim a refund for donations.
+    ///
+    /// **Authorization:** Donor must call `require_auth()`.
+    /// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
+    /// **Reentrancy:** Acquires lock at entry, releases at exit.
+    ///
+    /// **See also:** `docs/state-machine.md` for refund eligibility rules, freeze/reentrancy gates,
+    /// and complete authorization matrix.
     ///
     /// # Panics
     /// - `Error::NotInitialized` if campaign not initialized
@@ -571,8 +583,14 @@ impl CampaignContract {
 
     /// Issue #246 – Upgrade the contract's WASM hash.
     ///
+    /// **Authorization:** Creator must call `require_auth()`.
+    /// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
+    ///
     /// Only the admin (creator address stored at initialization) can call this.
     /// Emits `contract_upgraded` event on success.
+    ///
+    /// **See also:** `docs/state-machine.md` for pre-upgrade migration checklist and
+    /// freeze/upgrade interaction rules.
     ///
     /// # Panics
     /// - `Error::Unauthorized` if not called by the creator
@@ -599,8 +617,13 @@ impl CampaignContract {
 
     /// Issue #246 – Freeze the contract, blocking all mutating operations.
     ///
+    /// **Authorization:** Creator must call `require_auth()`.
+    ///
     /// Only the admin (creator) can call this.
     /// While frozen, all write operations are rejected with `Error::ContractFrozen`.
+    ///
+    /// **See also:** `docs/state-machine.md` for freeze module specification, freeze check pattern,
+    /// and complete freeze matrix showing which operations are blocked.
     ///
     /// # Panics
     /// - `Error::Unauthorized` if not called by the creator
@@ -619,7 +642,11 @@ impl CampaignContract {
 
     /// Issue #246 – Unfreeze the contract, re-enabling mutating operations.
     ///
+    /// **Authorization:** Creator must call `require_auth()`.
+    ///
     /// Only the admin (creator) can call this.
+    ///
+    /// **See also:** `docs/state-machine.md` for freeze/unfreeze lifecycle and emergency procedures.
     ///
     /// # Panics
     /// - `Error::Unauthorized` if not called by the creator
