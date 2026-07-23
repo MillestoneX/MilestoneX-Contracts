@@ -1,0 +1,18 @@
+[package]
+name = "milestonex-campaigns-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "MilestoneX multi-campaign registry contract — many campaigns in one instance"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { version = "26.0.1", features = ["testutils"] }
+# Inherit the workspace-wide ed25519-dalek = 2.2.0 exact pin (see
+# /Cargo.toml [workspace.dependencies] for the rationale).

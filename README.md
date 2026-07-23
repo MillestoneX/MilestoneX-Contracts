@@ -16,6 +16,8 @@ Decision: **Option B (conservative)** — keep `campaign/` (`milestonex-campaign
 
 `crates/contracts/core/` (`milestonex-core`) is retained only as a legacy compatibility/reference contract. Do not add new campaign features there; use `campaign/` for any new logic, analytics endpoints, or deployment work. Any remaining behavior worth preserving from `core` should be migrated into `campaign/` before `core` is removed in a future breaking release.
 
+`campaigns-registry/` (`milestonex-campaigns-registry`) is a separate, additive contract for the many-campaigns-per-instance use case that `campaign/` intentionally does not support (`campaign/` stays single-campaign-per-instance). It does not replace `campaign/` for single-campaign deployments. See [docs/multi-campaign.md](docs/multi-campaign.md) for its API, migration plan, and current scope limitations.
+
 Canonical campaign analytics now live on `milestonex-campaign`: use `get_campaign_report`, `get_platform_summary`, `get_dashboard_metrics`, `get_donation_count`, `get_donor_count`, `get_release_count`, and `get_total_tx_count` for dashboard and export workflows.
 
 **MilestoneX** is an on-chain crowdfunding protocol built on the **Stellar Network** and **Soroban smart contracts**. It provides a transparent, trust-minimized platform where campaign creators can raise funds in native XLM or any Stellar-based asset (USDC, NGNT, custom tokens), and donors retain full visibility into how their contributions are deployed.
@@ -32,7 +34,13 @@ milestonex-contract/
 |   |-- Cargo.toml
 |   `-- src/
 |       `-- lib.rs
+|-- campaigns-registry/        # Multi-campaign registry contract (additive)
+|   |-- Cargo.toml
+|   `-- src/
+|       `-- lib.rs
 ├── Cargo.toml                 # Workspace configuration
+├── docs/
+│   └── multi-campaign.md      # campaigns-registry API and migration plan
 ├── crates/
 │   ├── contracts/
 │   │   └── core/             # Legacy compatibility/reference contract
