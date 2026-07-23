@@ -6,28 +6,20 @@ use crate::storage::{
 use crate::types::{Error, MilestoneStatus};
 use soroban_sdk::{panic_with_error, token, Address, Env};
 
-/// Issue #207 – `release_milestone` function
+/// Issue #207, #242, #244 – Release funds for an unlocked milestone.
 ///
-/// Releases funds for an unlocked milestone to the recipient.
+/// **Authorization:** Creator must call `require_auth()` (via wrapper in `lib.rs`).
+/// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
+/// **Reentrancy:** Acquires lock at entry, releases at exit.
+///
+/// Releases funds for an unlocked milestone to the recipient using the campaign's
+/// primary (first) accepted asset.
+///
+/// **See also:** `docs/state-machine.md` for milestone state transitions, release ordering,
+/// and complete authorization matrix.
 ///
 /// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
 /// verified `creator.require_auth()` before calling this function.
-///
-/// Validates milestone status is `Unlocked`.
-/// Prevents double release — `Released` milestones panic with `MilestoneAlreadyReleased`.
-/// Prevents skipping milestones — previous milestone must be Released.
-/// Transfers tokens from the campaign's primary (first) accepted asset to recipient.
-/// Sets milestone status to `Released`.
-/// Emits `milestone_released` event.
-/// Respects the freeze flag — panics with `ContractFrozen` if frozen.
-///
-/// For campaigns accepting multiple assets, use `release_milestone_multi_asset`
-/// instead, which distributes the release proportionally across all assets.
-///
-/// ## Security
-///
-/// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-/// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized

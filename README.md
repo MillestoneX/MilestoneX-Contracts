@@ -10,6 +10,12 @@
 - [**Changelog**](CHANGELOG.md) - Release notes and version history
 - [**Security Policy**](SECURITY.md) - Security guidelines and vulnerability reporting
 
+## 📖 Technical Documentation
+
+- [**State Machine & Authorization Matrix**](docs/state-machine.md) - Complete reference for entrypoint security posture, authorization gates, freeze/reentrancy locks, and state transitions
+- [**Event Schema**](docs/events.md) - All contract events, their topics, and data structures
+- [**Deployment Guide**](docs/deployment.md) - Deployment workflow and network configuration
+
 ## Contract Canonicalization
 
 Decision: **Option B (conservative)** — keep `campaign/` (`milestonex-campaign`) as the canonical crowdfunding contract for all new development, audits, deployments, and integrations. The `campaign/` implementation remains the authoritative contract for milestone flows, refunds, freeze/upgrade controls, reentrancy protection, typed errors, and dashboard analytics.

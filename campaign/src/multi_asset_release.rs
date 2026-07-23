@@ -46,15 +46,20 @@ fn compute_asset_release(
 
 // ─── Main entrypoint ─────────────────────────────────────────────────────────
 
-/// Issue #208 — Multi-asset milestone release
+/// Issue #208, #242, #244 – Release milestone funds proportionally across all assets.
 ///
-/// Releases milestone funds proportionally across every accepted asset.
+/// **Authorization:** Creator must call `require_auth()` (via wrapper in `lib.rs`).
+/// **Freeze Gate:** Checked before any mutation.
+/// **Reentrancy:** Acquires lock at entry, releases at exit.
+///
+/// Releases milestone funds proportionally across every accepted asset using the formula:
+/// `per_asset_release = floor((asset_raised * milestone_release) / total_raised)`
+///
+/// **See also:** `docs/state-machine.md` for milestone state transitions, multi-asset release logic,
+/// and complete authorization matrix.
 ///
 /// **Precondition:** The caller (`#[contractimpl]` wrapper) MUST have already
 /// verified `creator.require_auth()` before calling this function.
-///
-/// Issue #242 – Reentrancy protection: acquires lock at entry, releases at exit.
-/// Issue #244 – Balance verification: checks contract balance before each transfer.
 ///
 /// Security properties:
 /// - Milestone must be in `Unlocked` state (exactly once).
@@ -62,10 +67,8 @@ fn compute_asset_release(
 /// - Status is written to storage BEFORE transfers (CEI pattern) so a
 ///   re-entrant call on the same milestone index fails immediately.
 /// - Recipient must be non-zero (validated before any transfer).
-/// - Per-asset actual balances are used, not stored estimates, so the
-///   contract can never release more than it actually holds.
-/// - Dust amounts below MIN_TRANSFER_AMOUNT are skipped rather than
-///   causing the whole release to fail.
+/// - Per-asset actual balances are used, not stored estimates.
+/// - Dust amounts below MIN_TRANSFER_AMOUNT are skipped.
 pub fn release_milestone_multi_asset(env: &Env, milestone_index: u32, recipient: Address) {
     // Issue #242 – Reentrancy protection: acquire lock
     acquire_lock(env);

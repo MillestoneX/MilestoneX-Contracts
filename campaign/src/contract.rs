@@ -9,15 +9,20 @@ use crate::types::{CampaignStatus, Error};
 use crate::{validate_campaign_transition, MAX_DEADLINE_GAP_SECONDS};
 use soroban_sdk::{panic_with_error, Env};
 
-/// Issue #212 – End the campaign early (before deadline).
+/// Issue #212, #243 – End the campaign early (before deadline).
+///
+/// **Authorization:** Creator must call `require_auth()`.
+/// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
 ///
 /// Transitions the campaign from `Active` or `GoalReached` to `Ended`.
-/// Requires creator authorization.
+///
+/// **See also:** `docs/state-machine.md` for campaign status transitions, authorization rules,
+/// and complete entrypoint matrix.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
-/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
+/// - `Error::ContractFrozen` if contract is frozen
 /// - `Error::InvalidCampaignTransition` if campaign is already Ended or Cancelled
 pub fn end_campaign(env: &Env) {
     let mut campaign =
@@ -40,15 +45,20 @@ pub fn end_campaign(env: &Env) {
     event::campaign_ended(env);
 }
 
-/// Issue #214 – Cancel the campaign.
+/// Issue #214, #243 – Cancel the campaign.
 ///
-/// Transitions the campaign from `Active`, `GoalReached`, or `Ended` to
-/// `Cancelled`.  Requires creator authorization.
+/// **Authorization:** Creator must call `require_auth()`.
+/// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
+///
+/// Transitions the campaign from `Active`, `GoalReached`, or `Ended` to `Cancelled`.
+/// All donors immediately become refund-eligible.
+///
+/// **See also:** `docs/state-machine.md` for campaign status transitions and authorization matrix.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
-/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
+/// - `Error::ContractFrozen` if contract is frozen
 /// - `Error::InvalidCampaignTransition` if campaign is already Cancelled
 pub fn cancel_campaign(env: &Env) {
     let mut campaign =
@@ -71,18 +81,20 @@ pub fn cancel_campaign(env: &Env) {
     event::campaign_cancelled(env, &campaign.creator);
 }
 
-/// Issue #215 – Extend the campaign deadline.
+/// Issue #215, #243 – Extend the campaign deadline.
+///
+/// **Authorization:** Creator must call `require_auth()`.
+/// **Freeze Gate:** Panics with `Error::ContractFrozen` if contract is frozen.
 ///
 /// Extends the campaign's `end_time` to a new future timestamp.
-/// The new deadline cannot be more than ten years from the current ledger time;
-/// this preserves the contract's time arithmetic invariants for status views,
-/// refund windows, milestone release metadata, and campaign reports.
-/// Requires creator authorization.
+/// The new deadline cannot be more than ten years from current ledger time.
+///
+/// **See also:** `docs/state-machine.md` for deadline validation rules and authorization matrix.
 ///
 /// # Panics
 /// - `Error::NotInitialized` if campaign not initialized
 /// - `Error::Unauthorized` if caller is not the creator
-/// - `Error::ContractFrozen` if contract is frozen (freeze invariant: all writes rejected)
+/// - `Error::ContractFrozen` if contract is frozen
 /// - `Error::InvalidEndTime` if `new_end_time <= current ledger timestamp`
 /// - `Error::InvalidEndTime` if `new_end_time` is more than ten years out
 /// - `Error::InvalidCampaignTransition` if campaign is not Active or GoalReached
