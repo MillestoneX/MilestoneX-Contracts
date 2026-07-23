@@ -1001,7 +1001,7 @@ fn test_initialize_fails_with_malicious_xlm_issuer() {
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
-        
+
         // Create a malicious XLM entry with a non-canonical issuer
         let malicious_issuer = Address::generate(&env);
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
@@ -1009,7 +1009,7 @@ fn test_initialize_fails_with_malicious_xlm_issuer() {
             asset_code: String::from_str(&env, "XLM"),
             issuer: Some(malicious_issuer),
         });
-        
+
         let _ = CampaignContract::initialize(
             env.clone(),
             creator,
@@ -1029,18 +1029,18 @@ fn test_donate_native_with_canonical_xlm_succeeds() {
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
-        
+
         // Create XLM entry with canonical issuer (simulated by using a known address)
         // In test environment, we use the canonical address
         let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
         let canonical_xlm = Address::from_string(&String::from_str(&env, canonical_xlm_str));
-        
+
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "XLM"),
             issuer: Some(canonical_xlm.clone()),
         });
-        
+
         let _ = CampaignContract::initialize(
             env.clone(),
             creator.clone(),
@@ -1050,7 +1050,7 @@ fn test_donate_native_with_canonical_xlm_succeeds() {
             default_milestones(&env),
             0,
         );
-        
+
         // Native donation should succeed with canonical XLM in accepted_assets
         let donor = Address::generate(&env);
         // Note: In a real test, we would need to mock the token contract
@@ -1067,7 +1067,7 @@ fn test_risk_indicator_detects_malicious_xlm() {
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
-        
+
         // Create XLM entry with non-canonical issuer
         let malicious_issuer = Address::generate(&env);
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
@@ -1075,7 +1075,7 @@ fn test_risk_indicator_detects_malicious_xlm() {
             asset_code: String::from_str(&env, "XLM"),
             issuer: Some(malicious_issuer),
         });
-        
+
         // This should fail initialization, so we manually set up the campaign
         // to test the risk_indicator function
         let mut campaign_data = crate::types::CampaignData {
@@ -1092,7 +1092,7 @@ fn test_risk_indicator_detects_malicious_xlm() {
             concluded_at_ledger: None,
         };
         crate::storage::set_campaign(&env, &campaign_data);
-        
+
         // Risk indicator should return a warning
         let warning = CampaignContract::risk_indicator(env.clone());
         // Check if the warning string is non-empty (indicates a warning)
@@ -1110,17 +1110,17 @@ fn test_risk_indicator_empty_for_valid_xlm() {
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
-        
+
         // Create XLM entry with canonical issuer
         let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
         let canonical_xlm = Address::from_string(&String::from_str(&env, canonical_xlm_str));
-        
+
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "XLM"),
             issuer: Some(canonical_xlm),
         });
-        
+
         let _ = CampaignContract::initialize(
             env.clone(),
             creator.clone(),
@@ -1130,7 +1130,7 @@ fn test_risk_indicator_empty_for_valid_xlm() {
             default_milestones(&env),
             0,
         );
-        
+
         // Risk indicator should return empty string for valid configuration
         let warning = CampaignContract::risk_indicator(env.clone());
         assert!(
@@ -1147,14 +1147,14 @@ fn test_risk_indicator_empty_for_no_xlm_entry() {
     with_contract(&env, || {
         let creator = Address::generate(&env);
         let end_time = env.ledger().timestamp() + 100_000;
-        
+
         // Create assets without XLM entry
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "USDC"),
             issuer: Some(Address::generate(&env)),
         });
-        
+
         let _ = CampaignContract::initialize(
             env.clone(),
             creator.clone(),
@@ -1164,7 +1164,7 @@ fn test_risk_indicator_empty_for_no_xlm_entry() {
             default_milestones(&env),
             0,
         );
-        
+
         // Risk indicator should return empty string when no XLM entry exists
         let warning = CampaignContract::risk_indicator(env.clone());
         assert!(

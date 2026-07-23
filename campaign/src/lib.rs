@@ -764,11 +764,11 @@ fn require_creator(env: &Env) {
 }
 
 /// Returns the canonical wrapped XLM contract address for the current network.
-/// 
+///
 /// In the current implementation, this returns a fixed address that must be
 /// present in accepted_assets if the campaign accepts XLM with an issuer.
 /// This prevents malicious creators from routing native XLM donations to arbitrary SACs.
-/// 
+///
 /// For production deployment, this should be configured based on the actual network
 /// (testnet vs mainnet) to use the well-known wrapped XLM SAC addresses.
 fn get_canonical_xlm_address(env: &Env) -> Address {
@@ -797,18 +797,18 @@ fn get_token_address_for_asset(env: &Env, asset: &AssetInfo, campaign: &Campaign
             // Return the canonical wrapped XLM address for the current network
             // This prevents malicious creators from routing native XLM to arbitrary SACs
             let canonical_address = get_canonical_xlm_address(env);
-            
+
             // Verify that the canonical XLM address is in accepted_assets
             let xlm_code = soroban_sdk::String::from_str(env, "XLM");
             let has_canonical_xlm = campaign
                 .accepted_assets
                 .iter()
                 .any(|a| a.asset_code == xlm_code && a.issuer == Some(canonical_address.clone()));
-            
+
             if !has_canonical_xlm {
                 panic_with_error(env, Error::NativeAssetConfigurationMismatch);
             }
-            
+
             canonical_address
         }
     }
@@ -831,7 +831,7 @@ fn validate_assets(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
 fn validate_native_xlm_configuration(env: &Env, assets: &Vec<StellarAsset>) -> Result<(), Error> {
     let xlm_code = soroban_sdk::String::from_str(env, "XLM");
     let canonical_address = get_canonical_xlm_address(env);
-    
+
     for asset in assets.iter() {
         if asset.asset_code == xlm_code {
             // If there's an XLM entry with an issuer, it must be the canonical address

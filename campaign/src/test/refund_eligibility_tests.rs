@@ -53,7 +53,8 @@ fn create_test_campaign(
             let mut assets = soroban_sdk::Vec::new(env);
             // Use canonical XLM address to satisfy validation
             let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-            let canonical_xlm = Address::from_string(&soroban_sdk::String::from_str(env, canonical_xlm_str));
+            let canonical_xlm =
+                Address::from_string(&soroban_sdk::String::from_str(env, canonical_xlm_str));
             assets.push_back(StellarAsset {
                 asset_code: soroban_sdk::String::from_str(env, "XLM"),
                 issuer: Some(canonical_xlm),

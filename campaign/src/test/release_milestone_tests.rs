@@ -129,11 +129,11 @@ fn create_multi_asset_campaign_with_funding(
             1 => "EURC",
             _ => "JPYC",
         };
-        
+
         // Register mock token for all assets (avoid XLM to prevent validation issues)
         let token_admin = Address::generate(env);
         let token_issuer = env.register_stellar_asset_contract(token_admin);
-        
+
         assets.push_back(StellarAsset {
             asset_code: String::from_str(env, code),
             issuer: Some(token_issuer.clone()),
