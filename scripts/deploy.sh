@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# scripts/deploy.sh — Deploy MilestoneX core contract to a Soroban network.
+# scripts/deploy.sh — Deploy the MilestoneX campaign contract to a Soroban
+# network. milestonex-campaign is the canonical, actively-developed contract;
+# milestonex-core is the legacy reference implementation and is not deployed
+# by this script (see issue #43).
 #
 # Usage:
 #   bash scripts/deploy.sh [testnet|sandbox|mainnet]
@@ -44,8 +47,8 @@ case "$NETWORK" in
 esac
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-WASM_PATH="target/wasm32v1-none/release/milestonex_core.wasm"
-OPTIMIZED_WASM_PATH="target/wasm32v1-none/release/milestonex_core.wasm"
+WASM_PATH="target/wasm32v1-none/release/milestonex_campaign.wasm"
+OPTIMIZED_WASM_PATH="target/wasm32v1-none/release/milestonex_campaign.wasm"
 DEPLOYMENTS_DIR="deployments"
 DEPLOYMENT_FILE="${DEPLOYMENTS_DIR}/${NETWORK}.json"
 

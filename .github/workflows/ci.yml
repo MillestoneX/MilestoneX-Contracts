@@ -115,3 +115,11 @@ jobs:
           cache-on-failure: true
       - name: cargo check --target wasm32v1-none (contracts)
         run: cargo check ${{ env.CONTRACTS }} --target wasm32v1-none
+      - name: cargo build --release (milestonex-campaign)
+        # cargo check above only type-checks; it does not run codegen/linking
+        # and so never actually produces (or validates) the deployable
+        # milestonex_campaign.wasm binary. Build it for real here so the size
+        # check below is checking a real artifact, not assuming one exists.
+        run: cargo build -p milestonex-campaign --target wasm32v1-none --release
+      - name: Verify campaign WASM artifact exists and is under the 64 KiB Soroban ceiling (issue #43)
+        run: bash scripts/check-wasm-artifact.sh
