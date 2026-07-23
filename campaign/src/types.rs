@@ -112,6 +112,8 @@ pub enum Error {
     // ── Upgrade / freeze ─────────────────────────────────────────────────── 8x
     /// Contract is frozen; all mutating operations are blocked.
     ContractFrozen = 80,
+    /// Native XLM configuration does not match the canonical wrapped XLM contract address.
+    NativeAssetConfigurationMismatch = 81,
 
     /// Campaign accepts multiple assets; use `release_milestone_multi_asset` instead.
     UseMultiAssetRelease = 82,
@@ -182,6 +184,7 @@ pub const WIRE_CODE_TABLE: &[(Error, u32)] = &[
     (Error::ReentrantCall, 60),
     (Error::InvalidAmount, 70),
     (Error::ContractFrozen, 80),
+    (Error::NativeAssetConfigurationMismatch, 81),
     (Error::InvalidPage, 84),
 ];
 
@@ -289,6 +292,7 @@ RefundAlreadyClaimed -> 52
 ReentrantCall -> 60
 InvalidAmount -> 70
 ContractFrozen -> 80
+NativeAssetConfigurationMismatch -> 81
 InvalidPage -> 84";
         assert_eq!(
             actual.trim(),

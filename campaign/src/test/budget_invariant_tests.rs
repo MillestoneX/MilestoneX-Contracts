@@ -81,9 +81,12 @@ const CLAIM_REFUND_MEM_MAX: u64 = 500_000;
 fn create_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<MilestoneData>) {
     let creator = Address::generate(env);
     let mut assets: Vec<StellarAsset> = Vec::new(env);
+    // Use canonical XLM address to satisfy validation
+    let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    let canonical_xlm = Address::from_string(&String::from_str(env, canonical_xlm_str));
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(Address::generate(env)),
+        issuer: Some(canonical_xlm),
     });
     let mut milestones: Vec<MilestoneData> = Vec::new(env);
     milestones.push_back(MilestoneData {
@@ -106,9 +109,12 @@ fn create_multi_milestone_campaign(
     let creator = Address::generate(env);
     let token_issuer = Address::generate(env);
     let mut assets: Vec<StellarAsset> = Vec::new(env);
+    // Use canonical XLM address to satisfy validation
+    let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    let canonical_xlm = Address::from_string(&String::from_str(env, canonical_xlm_str));
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(token_issuer.clone()),
+        issuer: Some(canonical_xlm),
     });
     let mut milestones: Vec<MilestoneData> = Vec::new(env);
     for i in 0..3 {
