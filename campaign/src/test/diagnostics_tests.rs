@@ -12,9 +12,12 @@ fn setup_basic_env(env: &Env) {
     with_contract(env, || {
         let creator = soroban_sdk::Address::generate(env);
         let mut assets: soroban_sdk::Vec<StellarAsset> = soroban_sdk::Vec::new(env);
+        // Use canonical XLM address to satisfy validation
+        let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+        let canonical_xlm = soroban_sdk::Address::from_string(&String::from_str(env, canonical_xlm_str));
         assets.push_back(StellarAsset {
             asset_code: String::from_str(env, "XLM"),
-            issuer: Some(soroban_sdk::Address::generate(env)),
+            issuer: Some(canonical_xlm),
         });
         let mut milestones: soroban_sdk::Vec<crate::types::MilestoneData> =
             soroban_sdk::Vec::new(env);

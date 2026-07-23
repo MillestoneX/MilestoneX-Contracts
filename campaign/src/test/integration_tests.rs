@@ -19,9 +19,12 @@ fn setup_basic_campaign(env: &Env) -> (Address, Vec<StellarAsset>, Vec<Milestone
     let creator = Address::generate(env);
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
+    // Use canonical XLM address to satisfy validation
+    let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    let canonical_xlm = Address::from_string(&String::from_str(env, canonical_xlm_str));
     assets.push_back(StellarAsset {
         asset_code: String::from_str(env, "XLM"),
-        issuer: Some(Address::generate(env)),
+        issuer: Some(canonical_xlm),
     });
 
     let mut milestones: Vec<MilestoneData> = Vec::new(env);
@@ -238,9 +241,12 @@ fn test_lifecycle_multi_milestone_unlock() {
         let end_time = env.ledger().timestamp() + 86_400;
 
         let mut assets: Vec<StellarAsset> = Vec::new(&env);
+        // Use canonical XLM address to satisfy validation
+        let canonical_xlm_str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+        let canonical_xlm = Address::from_string(&String::from_str(&env, canonical_xlm_str));
         assets.push_back(StellarAsset {
             asset_code: String::from_str(&env, "XLM"),
-            issuer: Some(Address::generate(&env)),
+            issuer: Some(canonical_xlm),
         });
 
         // Three milestones: 1000, 2000, 3000

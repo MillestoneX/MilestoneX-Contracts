@@ -45,8 +45,9 @@ fn create_test_campaign(env: &Env, creator: &Address, milestone_count: u32) {
     let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
 
     let mut assets: Vec<StellarAsset> = Vec::new(env);
+    // Use USDC instead of XLM to avoid the canonical XLM validation
     assets.push_back(StellarAsset {
-        asset_code: String::from_str(env, "XLM"),
+        asset_code: String::from_str(env, "USDC"),
         issuer: Some(token_issuer),
     });
 
@@ -123,13 +124,16 @@ fn create_multi_asset_campaign_with_funding(
     let mut issuers: Vec<Address> = Vec::new(env);
 
     for i in 0..asset_count {
-        let token_admin = Address::generate(env);
-        let token_issuer = env.register_stellar_asset_contract(token_admin.clone());
         let code = match i {
-            0 => "XLM",
-            1 => "USDC",
-            _ => "EURC",
+            0 => "USDC",
+            1 => "EURC",
+            _ => "JPYC",
         };
+        
+        // Register mock token for all assets (avoid XLM to prevent validation issues)
+        let token_admin = Address::generate(env);
+        let token_issuer = env.register_stellar_asset_contract(token_admin);
+        
         assets.push_back(StellarAsset {
             asset_code: String::from_str(env, code),
             issuer: Some(token_issuer.clone()),
