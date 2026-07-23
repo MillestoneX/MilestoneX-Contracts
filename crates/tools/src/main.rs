@@ -88,13 +88,16 @@ fn print_available_commands() {
     println!("  keypair <cmd>         - Master/distribution keypair lifecycle");
     println!("  signing <cmd>         - Build donation/campaign/custom signing requests");
     println!("  response <cmd>        - Process/validate/save signed wallet responses");
+    println!("  invoke <method> [args] - Invoke a method on the deployed campaign contract");
+    println!("                          Requires: CONTRACT_ID (or SOROBAN_CONTRACT_ID) and");
+    println!("                          SOROBAN_SOURCE (or STELLAR_SECRET_KEY) env vars.");
     println!();
     println!("Stubs (no-op placeholders, do not rely on in production):");
     println!("  deploy                - Stub. Use `stellar contract deploy` or `make deploy-testnet`.");
-    println!("  invoke <method>       - Stub. Use `stellar contract invoke` natively.");
     println!();
-    println!("Deprecated (still functional, but will be removed):");
-    println!("  account <cmd>         - Deprecated. Use `keypair generate-master|fund` instead.");
+    println!("Deprecated (still functional via delegation, will be removed):");
+    println!("  account create        - Deprecated alias for `keypair generate-master`.");
+    println!("  account fund          - Deprecated alias for `keypair fund`.");
     println!();
     println!("Run `milestonex-cli <command>` (no subcommand) for usage details.");
     println!("Full status of every command mentioned in docs: docs/deployment.md.");
@@ -178,70 +181,203 @@ fn handle_deploy() -> Result<()> {
 }
 
 fn handle_invoke(args: &[String]) -> Result<()> {
-    println!("🔄 The 'invoke' command is a stub and is NOT yet implemented in this binary.");
+    use std::process::Command;
+
     if args.is_empty() {
-        println!("💡 Invoke natively with:");
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- <method> [args...]");
-    } else {
-        println!("💡 You asked to invoke '{}'. Run it natively for now:", args[0]);
-        println!("     stellar contract invoke \\");
-        println!("         --id <CONTRACT_ID> \\");
-        println!("         --source <KEY> \\");
-        println!("         --network testnet \\");
-        println!("         -- {} [args...]", args[0]);
+        println!("🔄 Invoke a method on the deployed MilestoneX campaign contract.");
+        println!();
+        println!("Usage: milestonex-cli invoke <method> [--arg <json_value>]...");
+        println!();
+        println!("Required environment variables:");
+        println!("  CONTRACT_ID          — the deployed contract address (or set SOROBAN_CONTRACT_ID)");
+        println!("  SOROBAN_SOURCE       — source keypair name / secret key (or set STELLAR_SECRET_KEY)");
+        println!("  SOROBAN_NETWORK      — testnet | mainnet (default: testnet)");
+        println!();
+        println!("Examples:");
+        println!("  CONTRACT_ID=CB7... SOROBAN_SOURCE=alice \\");
+        println!("    milestonex-cli invoke version");
+        println!();
+        println!("  CONTRACT_ID=CB7... SOROBAN_SOURCE=alice \\");
+        println!("    milestonex-cli invoke get_dashboard_metrics --arg '1'");
+        println!();
+        println!("Canonical contract methods (milestonex-campaign):");
+        println!("  version                   — return contract version");
+        println!("  get_dashboard_metrics <id>— aggregate metrics for a campaign");
+        println!("  get_campaign_report <id>  — full campaign report");
+        println!("  get_platform_summary      — platform-wide statistics");
+        println!("  get_donation_count <id>   — number of donations for a campaign");
+        println!("  get_donor_count <id>      — unique donor count");
+        println!("  get_release_count <id>    — milestone release count");
+        println!("  get_total_tx_count <id>   — total transaction count");
+        return Ok(());
     }
-    println!("🔗 Tracked in: https://github.com/MillestoneX/MilestoneX-Contracts/issues/37");
+
+    let method = &args[0];
+
+    // Resolve contract ID — prefer explicit env var, then .milestonex_contract_id file.
+    let contract_id = env::var("CONTRACT_ID")
+        .or_else(|_| env::var("SOROBAN_CONTRACT_ID"))
+        .or_else(|_| {
+            std::fs::read_to_string(".milestonex_contract_id")
+                .map(|s| s.trim().to_string())
+                .map_err(|_| env::VarError::NotPresent)
+        })
+        .context(
+            "CONTRACT_ID not set. Set the CONTRACT_ID env var, or run `make deploy-testnet` \
+             first — it writes the deployed address to .milestonex_contract_id automatically.",
+        )?;
+
+    // Resolve source key — prefer SOROBAN_SOURCE, then STELLAR_SECRET_KEY.
+    let source = env::var("SOROBAN_SOURCE")
+        .or_else(|_| env::var("STELLAR_SECRET_KEY"))
+        .context(
+            "SOROBAN_SOURCE not set. Set SOROBAN_SOURCE (keypair name) or STELLAR_SECRET_KEY \
+             (secret key) so stellar contract invoke can sign the transaction.",
+        )?;
+
+    let network = env::var("SOROBAN_NETWORK").unwrap_or_else(|_| "testnet".to_string());
+
+    // --- Build the stellar contract invoke argument list ---
+    // Positional args after the method name are passed as-is after `--`.
+    // They can be raw JSON scalars (numbers, strings, booleans) or JSON objects.
+    // stellar-cli already speaks JSON on the command line, so we pass them through.
+    let method_args: Vec<String> = args[1..].to_vec();
+
+    // Validate JSON args so we surface mistakes before shelling out.
+    for (i, arg) in method_args.iter().enumerate() {
+        // Skip flag-style args like "--arg" that precede the value.
+        if arg.starts_with('-') {
+            continue;
+        }
+        // Try to parse as JSON; fall back gracefully (stellar-cli handles plain strings too).
+        if !arg.is_empty() {
+            if let Err(_) = serde_json::from_str::<serde_json::Value>(arg) {
+                // Not valid JSON — treat as a plain string literal (stellar-cli accepts this).
+                // Only warn if it looks like the user meant JSON (starts with { or [).
+                if arg.starts_with('{') || arg.starts_with('[') {
+                    println!(
+                        "⚠️  Argument {} '{}' looks like JSON but failed to parse. \
+                         Passing as-is — stellar-cli may reject it.",
+                        i + 1,
+                        arg
+                    );
+                }
+            }
+        }
+    }
+
+    println!("🔄 Invoking '{}' on network: {}", method, network);
+    println!("📝 Contract ID: {}", contract_id);
+    println!("🔑 Source:      {}", source);
+    if !method_args.is_empty() {
+        println!("📥 Args:        {}", method_args.join(" "));
+    }
+    println!();
+
+    // Build the command:
+    //   stellar contract invoke \
+    //     --id <CONTRACT_ID> \
+    //     --source <SOURCE> \
+    //     --network <NETWORK> \
+    //     -- <method> [method_args...]
+    let mut cmd = Command::new("stellar");
+    cmd.arg("contract")
+        .arg("invoke")
+        .arg("--id")
+        .arg(&contract_id)
+        .arg("--source")
+        .arg(&source)
+        .arg("--network")
+        .arg(&network)
+        .arg("--")
+        .arg(method);
+
+    for arg in &method_args {
+        cmd.arg(arg);
+    }
+
+    let output = cmd.output().context(
+        "Failed to execute `stellar contract invoke`. \
+         Is stellar-cli installed? Run: cargo install --locked stellar-cli --features opt",
+    )?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        println!("✅ Invocation successful!");
+        if !stdout.trim().is_empty() {
+            println!("📤 Result: {}", stdout.trim());
+        }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        println!("❌ Invocation failed (exit code: {})", output.status);
+        if !stdout.trim().is_empty() {
+            println!("stdout: {}", stdout.trim());
+        }
+        if !stderr.trim().is_empty() {
+            println!("stderr: {}", stderr.trim());
+        }
+        anyhow::bail!("stellar contract invoke exited with error");
+    }
+
     Ok(())
 }
 
 fn handle_account(args: &[String]) -> Result<()> {
-    println!("⚠️  DEPRECATION WARNING: The 'account' namespace is deprecated and will be removed in a future release.");
-    println!("💡 Please use the 'keypair' namespace instead. See below for mapping.");
+    // Always show the deprecation banner — this namespace is a thin alias kept
+    // only for backward compatibility with scripts written before Issue #31
+    // introduced the `keypair` sub-command.
+    println!("╔══════════════════════════════════════════════════════════════╗");
+    println!("║  ⚠️  DEPRECATION WARNING                                      ║");
+    println!("║  The 'account' sub-command is deprecated and will be removed ║");
+    println!("║  in a future release.  Please migrate to the 'keypair'       ║");
+    println!("║  namespace:                                                   ║");
+    println!("║                                                               ║");
+    println!("║    account create        →  keypair generate-master          ║");
+    println!("║    account fund <a> <n>  →  keypair fund <a> <n>             ║");
+    println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
 
     if args.is_empty() {
-        println!("👤 Account Management Commands (Deprecated)");
-        println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        println!("Usage: milestonex-cli account <command>");
+        println!("Usage: milestonex-cli account <create|fund> [args...]");
         println!();
-        println!("Commands (deprecated - use 'keypair' instead):");
-        println!("  create                              - Create master keypair (use 'keypair generate-master')");
-        println!("  fund <account> <amount>              - Fund account on testnet (use 'keypair fund')");
+        println!("Commands (deprecated — use 'keypair' instead):");
+        println!("  create                         — alias for 'keypair generate-master'");
+        println!("  fund <account_pub> <amount_xlm> — alias for 'keypair fund'");
         println!();
-        println!("💡 Migrate to:");
-        println!("     milestonex-cli keypair generate-master");
-        println!("     milestonex-cli keypair fund <account> <amount>");
+        println!("Migrate now:");
+        println!("  milestonex-cli keypair generate-master");
+        println!("  milestonex-cli keypair fund <account_public_key> <amount_xlm>");
         return Ok(());
     }
 
-    // Map account commands to keypair commands for backward compatibility
+    // Transparently delegate to the canonical keypair handlers.
     match args[0].as_str() {
         "create" => {
-            println!("🔄 'account create' is deprecated. Delegating to 'keypair generate-master'...");
+            println!("🔄 Delegating 'account create' → 'keypair generate-master'");
             println!();
             handle_keypair(&["generate-master".to_string()])?;
         }
         "fund" => {
             if args.len() < 3 {
                 println!("Usage: milestonex-cli account fund <account_public_key> <amount_xlm>");
-                println!("💡 Please use: milestonex-cli keypair fund <account_public_key> <amount_xlm>");
+                println!();
+                println!("Preferred form:");
+                println!("  milestonex-cli keypair fund <account_public_key> <amount_xlm>");
                 return Ok(());
             }
-            println!("🔄 'account fund' is deprecated. Delegating to 'keypair fund'...");
+            println!("🔄 Delegating 'account fund' → 'keypair fund'");
             println!();
             handle_keypair(&["fund".to_string(), args[1].clone(), args[2].clone()])?;
         }
         _ => {
-            println!("❌ Unknown account command: {}", args[0]);
-            println!("💡 The 'account' namespace is deprecated. Available commands:");
-            println!("   account create   (use 'keypair generate-master')");
-            println!("   account fund     (use 'keypair fund')");
+            println!("❌ Unknown account sub-command: '{}'", args[0]);
             println!();
-            println!("🔗 See https://github.com/MillestoneX/MilestoneX-Contracts/issues/37 for details");
+            println!("The 'account' namespace only aliases:");
+            println!("  account create   →  keypair generate-master");
+            println!("  account fund     →  keypair fund <account> <amount>");
+            println!();
+            println!("Run 'milestonex-cli keypair' for the full keypair command list.");
         }
     }
 
