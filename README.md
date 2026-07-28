@@ -257,10 +257,13 @@ cargo test --workspace
 > The commands below match `crates/tools/src/main.rs` and the canonical
 > status table in
 > [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
-> `deploy` and `invoke` are currently stubs in the CLI binary;
-> use the native `stellar contract …` commands or `make deploy-testnet`
-> instead. `account` is deprecated but still functional — it delegates to
-> `keypair` commands with a deprecation warning. `config init`,
+> `deploy` is currently a stub in the CLI binary;
+> use `make deploy-testnet` or `bash scripts/deploy.sh testnet` instead.
+> `invoke` is now fully wired — set `CONTRACT_ID` (or `SOROBAN_CONTRACT_ID`)
+> and `SOROBAN_SOURCE` (or `STELLAR_SECRET_KEY`), then run
+> `milestonex-cli invoke <method> [args...]` directly.
+> `account` is deprecated but still functional — it delegates to
+> `keypair` commands with a deprecation banner. `config init`,
 > `contract-id`, `build-donation-tx`, `submit-tx`, `verify-tx`,
 > `prepare-wallet-signing`, and `complete-wallet-signing` shown in older
 > docs are **not implemented** — see issue
@@ -375,14 +378,20 @@ Expected output:
 
 ### Step 4: Invoke the ping Method
 
-> The in-CLI `invoke` command is also a stub. Use `stellar contract invoke`
-> natively against your deployed contract ID.
-
 ```bash
 # Read the contract ID that Step 3 wrote out
 CONTRACT_ID=$(cat .milestonex_contract_id)
 
-# Invoke a contract method (replace `version` with any contract method such as `ping`)
+# Invoke a contract method using the CLI (invoke is now fully wired)
+milestonex-cli invoke version
+
+# Or invoke with additional args (e.g., get_dashboard_metrics for campaign ID 1)
+milestonex-cli invoke get_dashboard_metrics 1
+```
+
+Or call `stellar contract invoke` natively if you prefer:
+
+```bash
 stellar contract invoke \
   --id "$CONTRACT_ID" \
   --source test_account \
@@ -437,7 +446,7 @@ stellar contract invoke \
 
 - **"WASM file not found"**: Run `make build-wasm` to build the contracts first.
 - **"Unknown command" or "coming soon"**: You ran an `milestonex-cli` command
-  that is still a stub (`deploy`, `invoke`). Run
+  that is still a stub (`deploy`). Run
   `cargo run -p milestonex-tools` with no arguments to see which commands are
   actually implemented, and follow
   [`docs/deployment.md`](docs/deployment.md#known-limitations--cli-status).
