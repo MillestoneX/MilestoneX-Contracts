@@ -3,13 +3,10 @@
 /Cargo.lock
 
 # Environment
-.env
-.env.local
 .env.testnet
 .env.mainnet
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -45,3 +42,5 @@ tarpaulin-ci/
 
 # Soroban test snapshots (build artifacts)
 **/test_snapshots/
+config.bat
+node_modules
